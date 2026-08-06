@@ -278,43 +278,54 @@ export class WorkspaceFs {
         throw new Error("Use o seletor de pastas do servidor.");
     }
 
+
     buildTreeRows() {
         const rows = [];
-        const entries = Object.entries(this.workspace.entries)
-            .map(([path, meta]) => ({ path, ...meta, name: baseName(path) }))
-            .sort((a, b) => {
+        const byParent = new Map();
+
+        for (const [path, meta] of Object.entries(this.workspace.entries)) {
+            const parent = parentPath(path);
+            if (!byParent.has(parent)) {
+                byParent.set(parent, []);
+            }
+            byParent.get(parent).push({
+                path,
+                name: baseName(path),
+                type: meta.type,
+                kind: meta.kind,
+            });
+        }
+
+        const sortSiblings = (list) => {
+            list.sort((a, b) => {
                 if (a.type !== b.type) {
                     return a.type === "dir" ? -1 : 1;
                 }
-                return a.path.localeCompare(b.path, "pt-BR", { sensitivity: "base" });
+                return a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" });
             });
-
-        const visible = (path) => {
-            let parent = parentPath(path);
-            while (parent) {
-                if (!this.isExpanded(parent)) {
-                    return false;
-                }
-                parent = parentPath(parent);
-            }
-            return true;
+            return list;
         };
 
-        for (const entry of entries) {
-            if (!visible(entry.path)) {
-                continue;
+        const walk = (parent, depth) => {
+            const children = sortSiblings(byParent.get(parent) || []);
+            for (const entry of children) {
+                rows.push({
+                    path: entry.path,
+                    name: entry.name,
+                    type: entry.type,
+                    kind: entry.kind,
+                    depth,
+                });
+                if (entry.type === "dir" && this.isExpanded(entry.path)) {
+                    walk(entry.path, depth + 1);
+                }
             }
-            const depth = entry.path.split("/").length - 1;
-            rows.push({
-                path: entry.path,
-                name: entry.name,
-                type: entry.type,
-                kind: entry.kind,
-                depth,
-            });
-        }
+        };
+
+        walk("", 0);
         return rows;
     }
+
 
     async readFile(path) {
         const key = normalizePath(path);
