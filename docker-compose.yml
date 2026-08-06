@@ -19,8 +19,8 @@ services:
     volumes:
       # Biblioteca de projetos LaTeX no NAS
       - /DATA/Documents/Biblioteca:/data/workspace
+    # Não use "cpus:" junto com deploy.resources (Compose/CasaOS conflita)
     mem_limit: 2g
-    cpus: 2.0
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
       interval: 30s
