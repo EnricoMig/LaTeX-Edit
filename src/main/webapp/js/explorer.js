@@ -1,5 +1,7 @@
 import { baseName, ensureTexExtension, parentPath } from "./workspace-fs.js";
 
+const DND_MIME = "application/x-latexedit-path";
+
 function iconFor(type, kind) {
     if (type === "dir") {
         return "▸";
@@ -16,6 +18,17 @@ function iconFor(type, kind) {
     return "T";
 }
 
+function isTexPath(path) {
+    return /\.tex$/i.test(path || "");
+}
+
+function hasDnDPayload(dataTransfer) {
+    if (!dataTransfer?.types) {
+        return false;
+    }
+    return Array.from(dataTransfer.types).includes(DND_MIME);
+}
+
 export function createExplorer({
     rootEl,
     treeEl,
@@ -30,15 +43,21 @@ export function createExplorer({
     let contextPath = null;
     let renamingPath = null;
     let renameInFlight = false;
-
+    let moveInFlight = false;
+    let dragSourcePath = null;
     const contextMenu = document.createElement("div");
     contextMenu.className = "context-menu";
     contextMenu.hidden = true;
+    contextMenu.setAttribute("role", "menu");
     document.body.appendChild(contextMenu);
 
     function hideContextMenu() {
         contextMenu.hidden = true;
         contextPath = null;
+    }
+
+    function isContextMenuOpen() {
+        return !contextMenu.hidden;
     }
 
     function showContextMenu(x, y, path, type, kind) {
@@ -112,6 +131,68 @@ export function createExplorer({
             render();
         } finally {
             renameInFlight = false;
+        }
+    }
+
+    function clearDropHighlights() {
+        treeEl.classList.remove("is-drop-root");
+        treeEl.querySelectorAll(".tree-row.is-drop-target").forEach((el) => {
+            el.classList.remove("is-drop-target");
+        });
+    }
+
+    function clearDragState() {
+        clearDropHighlights();
+        treeEl.classList.remove("is-dnd-active");
+        treeEl.querySelectorAll(".tree-row.is-dragging").forEach((el) => {
+            el.classList.remove("is-dragging");
+        });
+        dragSourcePath = null;
+    }
+
+    function resolveDropTarget(event) {
+        const row = event.target.closest?.(".tree-row");
+        if (row?.dataset.type === "dir") {
+            return row.dataset.path;
+        }
+        if (row?.dataset.type === "file") {
+            return parentPath(row.dataset.path);
+        }
+        // Soltar na área vazia da árvore = raiz do projeto
+        if (treeEl.contains(event.target)) {
+            return "";
+        }
+        return null;
+    }
+
+    async function commitMove(sourcePath, destDir) {
+        if (moveInFlight) {
+            return;
+        }
+        const source = sourcePath;
+        const targetDir = destDir ?? "";
+        if (!source || !isTexPath(source)) {
+            return;
+        }
+        if (parentPath(source) === targetDir) {
+            return;
+        }
+        const wasActive = fs.getActivePath() === source;
+        moveInFlight = true;
+        try {
+            const moved = await fs.movePath(source, targetDir);
+            if (targetDir) {
+                fs.setExpanded(targetDir, true);
+            }
+            onTreeChanged?.();
+            if (wasActive) {
+                onOpenFile?.(moved, { force: true });
+            }
+        } catch (error) {
+            window.alert(error.message || "Não foi possível mover o arquivo.");
+            render();
+        } finally {
+            moveInFlight = false;
         }
     }
 
@@ -241,15 +322,17 @@ export function createExplorer({
                 const label = isRenaming
                     ? `<input class="tree-rename" data-rename="${row.path}" value="${baseName(row.path).replaceAll('"', "&quot;")}" />`
                     : `<span class="tree-label">${row.name}</span>`;
+                const canDrag = row.type === "file" && isTexPath(row.path) && !isRenaming;
 
                 return `
                     <div
-                        class="tree-row${active ? " is-active" : ""}${row.type === "dir" ? " is-dir" : " is-file"}${row.kind === "pdf" ? " is-pdf" : ""}"
+                        class="tree-row${active ? " is-active" : ""}${row.type === "dir" ? " is-dir" : " is-file"}${row.kind === "pdf" ? " is-pdf" : ""}${canDrag ? " is-draggable" : ""}"
                         data-path="${row.path}"
                         data-type="${row.type}"
                         data-kind="${row.kind || "tex"}"
                         style="--depth: ${row.depth}"
-                        title="${row.path}"
+                        title="${row.path}${canDrag ? " · Arraste para mover" : ""}"
+                        ${canDrag ? 'draggable="true"' : ""}
                     >
                         ${chevron}
                         <span class="tree-icon" data-kind="${row.type === "dir" ? "dir" : row.kind || "tex"}" aria-hidden="true">${iconFor(row.type, row.kind)}</span>
@@ -298,6 +381,72 @@ export function createExplorer({
         );
     });
 
+    treeEl.addEventListener("dragstart", (event) => {
+        const row = event.target.closest(".tree-row");
+        if (!row || row.dataset.type !== "file" || !isTexPath(row.dataset.path) || renamingPath) {
+            event.preventDefault();
+            return;
+        }
+        hideContextMenu();
+        dragSourcePath = row.dataset.path;
+        event.dataTransfer.setData(DND_MIME, row.dataset.path);
+        event.dataTransfer.setData("text/plain", row.dataset.path);
+        event.dataTransfer.effectAllowed = "move";
+        row.classList.add("is-dragging");
+        treeEl.classList.add("is-dnd-active");
+    });
+
+    treeEl.addEventListener("dragend", () => {
+        clearDragState();
+    });
+
+    treeEl.addEventListener("dragover", (event) => {
+        if (!hasDnDPayload(event.dataTransfer) && !dragSourcePath) {
+            return;
+        }
+        const destDir = resolveDropTarget(event);
+        if (destDir === null) {
+            return;
+        }
+        const source = dragSourcePath || "";
+        if (source && parentPath(source) === destDir) {
+            clearDropHighlights();
+            return;
+        }
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        clearDropHighlights();
+        const row = event.target.closest(".tree-row");
+        if (row?.dataset.type === "dir") {
+            row.classList.add("is-drop-target");
+        } else {
+            treeEl.classList.add("is-drop-root");
+        }
+    });
+
+    treeEl.addEventListener("dragleave", (event) => {
+        if (!treeEl.contains(event.relatedTarget)) {
+            clearDropHighlights();
+        }
+    });
+
+    treeEl.addEventListener("drop", (event) => {
+        if (!hasDnDPayload(event.dataTransfer) && !dragSourcePath) {
+            return;
+        }
+        event.preventDefault();
+        const source =
+            event.dataTransfer.getData(DND_MIME) ||
+            event.dataTransfer.getData("text/plain") ||
+            dragSourcePath;
+        const destDir = resolveDropTarget(event);
+        clearDragState();
+        if (!source || destDir === null) {
+            return;
+        }
+        commitMove(source, destDir);
+    });
+
     treeEl.addEventListener("keydown", (event) => {
         if (!event.target.matches("input.tree-rename")) {
             return;
@@ -336,11 +485,33 @@ export function createExplorer({
         handleContextAction(btn.dataset.action);
     });
 
-    document.addEventListener("click", (event) => {
-        if (!contextMenu.hidden && !contextMenu.contains(event.target)) {
+    // Clique esquerdo (ou toque) fora fecha o menu imediatamente
+    document.addEventListener(
+        "pointerdown",
+        (event) => {
+            if (!isContextMenuOpen()) {
+                return;
+            }
+            if (event.button !== 0) {
+                return;
+            }
+            if (contextMenu.contains(event.target)) {
+                return;
+            }
             hideContextMenu();
-        }
-    });
+        },
+        true
+    );
+
+    document.addEventListener(
+        "keydown",
+        (event) => {
+            if (event.key === "Escape" && isContextMenuOpen()) {
+                hideContextMenu();
+            }
+        },
+        true
+    );
 
     rootEl.querySelector("#btn-new-file")?.addEventListener("click", () => {
         const active = fs.getActivePath();
@@ -354,6 +525,7 @@ export function createExplorer({
             active && fs.isFile(active) ? parentPath(active) : active && fs.isDir(active) ? active : "";
         promptNewItem("dir", parent);
     });
+
 
     return {
         render,

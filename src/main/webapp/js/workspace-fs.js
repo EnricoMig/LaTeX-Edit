@@ -378,19 +378,22 @@ export class WorkspaceFs {
         }
     }
 
-    async renamePath(path, nextName) {
-        const key = normalizePath(path);
-        const parent = parentPath(key);
-        let targetName = nextName.trim();
-        if (this.isPdf(key) && !PDF_EXT.test(targetName)) {
-            targetName = `${targetName.replace(/\.pdf$/i, "")}.pdf`;
-        } else if (this.isTextFile(key) && !PDF_EXT.test(targetName)) {
-            targetName = ensureTexExtension(targetName);
+    async relocate(fromPath, destPath) {
+        const key = normalizePath(fromPath);
+        const dest = normalizePath(destPath);
+        if (!key || !dest) {
+            throw new Error("Caminho inválido.");
         }
-        const dest = parent ? `${parent}/${targetName}` : targetName;
-        if (normalizePath(dest) === key) {
+        if (dest === key) {
             return key;
         }
+        if (this.workspace.entries[dest]) {
+            throw new Error(`Já existe um item em "${dest}".`);
+        }
+        if (this.isDir(key) && (dest === key || dest.startsWith(`${key}/`))) {
+            throw new Error("Não é possível mover uma pasta para dentro dela mesma.");
+        }
+
         await apiJson("POST", "/api/fs/rename", {
             from: this.fullPath(key),
             to: this.fullPath(dest),
@@ -417,6 +420,10 @@ export class WorkspaceFs {
             this.contentCache.set(dest, this.contentCache.get(key));
             this.contentCache.delete(key);
         }
+        if (this.pdfUrls.has(key)) {
+            this.pdfUrls.set(dest, this.pdfUrls.get(key));
+            this.pdfUrls.delete(key);
+        }
         if (this.workspace.activePath === key) {
             this.workspace.activePath = dest;
         } else if (this.workspace.activePath.startsWith(prefix)) {
@@ -424,6 +431,42 @@ export class WorkspaceFs {
         }
         return dest;
     }
+
+    async renamePath(path, nextName) {
+        const key = normalizePath(path);
+        const parent = parentPath(key);
+        let targetName = nextName.trim();
+        if (this.isPdf(key) && !PDF_EXT.test(targetName)) {
+            targetName = `${targetName.replace(/\.pdf$/i, "")}.pdf`;
+        } else if (this.isTextFile(key) && !PDF_EXT.test(targetName)) {
+            targetName = ensureTexExtension(targetName);
+        }
+        const dest = parent ? `${parent}/${targetName}` : targetName;
+        return this.relocate(key, dest);
+    }
+
+    /**
+     * Move um arquivo .tex para outra pasta do projeto ("" = raiz).
+     */
+    async movePath(path, destDir) {
+        const key = normalizePath(path);
+        if (!this.isFile(key)) {
+            throw new Error("Somente arquivos podem ser movidos por arrastar.");
+        }
+        if (!/\.tex$/i.test(key)) {
+            throw new Error("Somente arquivos .tex podem ser movidos por arrastar.");
+        }
+        const destParent = normalizePath(destDir);
+        if (destParent && !this.isDir(destParent)) {
+            throw new Error("Pasta de destino inválida.");
+        }
+        if (parentPath(key) === destParent) {
+            return key;
+        }
+        const dest = destParent ? `${destParent}/${baseName(key)}` : baseName(key);
+        return this.relocate(key, dest);
+    }
+
 
     resolveMainDocument(preferredPath) {
         const preferred = normalizePath(preferredPath);

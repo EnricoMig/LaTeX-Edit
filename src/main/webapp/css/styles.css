@@ -808,6 +808,34 @@ html[data-theme="dark"] .theme-icon-sun {
     color: var(--accent-hover);
 }
 
+.tree-row.is-draggable {
+    cursor: grab;
+}
+
+.tree-row.is-dragging {
+    opacity: 0.45;
+    cursor: grabbing;
+}
+
+.tree-row.is-drop-target {
+    background: color-mix(in srgb, var(--accent) 18%, var(--paper-raised));
+    outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+    outline-offset: -1px;
+}
+
+.explorer-tree.is-dnd-active {
+    outline: 1px dashed color-mix(in srgb, var(--line-strong) 80%, transparent);
+    outline-offset: -2px;
+    border-radius: 6px;
+}
+
+.explorer-tree.is-drop-root {
+    outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+    outline-offset: -2px;
+    background: color-mix(in srgb, var(--accent-soft) 35%, transparent);
+}
+
+
 .tree-chevron {
     width: 0.75rem;
     flex: 0 0 auto;
@@ -1206,6 +1234,10 @@ html[data-theme="dark"] .theme-icon-sun {
     font-size: 0.78rem;
     background: var(--surface-hover);
     color: var(--ink);
+}
+
+.context-menu[hidden] {
+    display: none !important;
 }
 
 .context-menu {
