@@ -771,7 +771,6 @@ html[data-theme="dark"] .theme-icon-sun {
     background: var(--accent-soft);
 }
 
-
 .explorer-actions {
     display: flex;
     gap: 0.15rem;
@@ -874,7 +873,6 @@ html[data-theme="dark"] .theme-icon-sun {
     outline-offset: -2px;
     background: color-mix(in srgb, var(--accent-soft) 35%, transparent);
 }
-
 
 .tree-chevron {
     width: 0.75rem;
@@ -1276,10 +1274,6 @@ html[data-theme="dark"] .theme-icon-sun {
     color: var(--ink);
 }
 
-.context-menu[hidden] {
-    display: none !important;
-}
-
 .context-menu {
     position: fixed;
     z-index: 1000;
@@ -1292,6 +1286,10 @@ html[data-theme="dark"] .theme-icon-sun {
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
+}
+
+.context-menu[hidden] {
+    display: none !important;
 }
 
 .context-item {
@@ -1394,6 +1392,62 @@ html[data-theme="dark"] .theme-icon-sun {
 
 .editor::selection {
     background: var(--editor-selection);
+}
+
+/* —— Autocomplete —— */
+.ac-popup {
+    position: fixed;
+    z-index: 1200;
+    min-width: 16rem;
+    max-width: min(28rem, calc(100vw - 16px));
+    max-height: 14rem;
+    overflow: auto;
+    padding: 0.25rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: var(--paper-raised);
+    box-shadow: var(--shadow-menu);
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.ac-popup[hidden] {
+    display: none !important;
+}
+
+.ac-item {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    width: 100%;
+    text-align: left;
+    padding: 0.4rem 0.55rem;
+    border-radius: 5px;
+    cursor: pointer;
+    color: var(--ink);
+}
+
+.ac-item:hover,
+.ac-item.is-active {
+    background: var(--accent-soft);
+}
+
+.ac-label {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--ink);
+}
+
+.ac-detail {
+    font-family: var(--font-ui);
+    font-size: 0.7rem;
+    color: var(--ink-muted);
+    flex: 0 0 auto;
 }
 
 /* —— Splitter —— */

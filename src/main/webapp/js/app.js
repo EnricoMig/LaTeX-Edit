@@ -5,6 +5,7 @@ import {
     updateCursorMeta,
     updateLineNumbers,
 } from "./editor.js";
+import { createAutocomplete } from "./autocomplete.js";
 import { createExplorer } from "./explorer.js";
 import { applyTheme, getStoredTheme, syncThemeToggle, toggleTheme } from "./theme.js";
 import { WorkspaceFs, baseName, ensureTexExtension, parentPath } from "./workspace-fs.js";
@@ -860,6 +861,11 @@ const explorer = createExplorer({
     onRequireFolder: openProjectFolder,
 });
 
+const autocomplete = createAutocomplete({
+    editor: els.editor,
+    getProjectTexPaths: () =>
+        Object.keys(fs.workspace?.entries || {}).filter((path) => /\.tex$/i.test(path)),
+});
 
 function bindEvents() {
     els.editor.addEventListener("input", () => {
@@ -869,6 +875,7 @@ function bindEvents() {
         markDirty(true);
         refreshEditorChrome();
         scheduleAutoCompile();
+        autocomplete.refresh();
     });
 
     els.editor.addEventListener("scroll", () => {
@@ -876,11 +883,16 @@ function bindEvents() {
     });
     els.editor.addEventListener("click", () => {
         updateCursorMeta(els.editor, els.cursorPos, els.charCount);
+        autocomplete.hide();
     });
     els.editor.addEventListener("keyup", () => {
         updateCursorMeta(els.editor, els.cursorPos, els.charCount);
     });
     els.editor.addEventListener("keydown", (event) => {
+        if (autocomplete.onKeyDown(event)) {
+            refreshEditorChrome();
+            return;
+        }
         if (event.key !== "Tab" || els.editor.readOnly) {
             return;
         }
