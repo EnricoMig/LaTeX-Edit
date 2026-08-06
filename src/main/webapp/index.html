@@ -56,17 +56,6 @@
             </div>
 
             <div class="topbar-right">
-                <div class="layout-switch" role="group" aria-label="Layout">
-                    <button type="button" class="layout-btn is-active" data-layout="split" title="Script + PDF">
-                        Split
-                    </button>
-                    <button type="button" class="layout-btn" data-layout="editor" title="Só script">
-                        Script
-                    </button>
-                    <button type="button" class="layout-btn" data-layout="pdf" title="Só PDF">
-                        PDF
-                    </button>
-                </div>
                 <span class="status-pill" id="status-sync" data-state="idle">Pronto</span>
                 <button type="button" class="btn btn-secondary" id="btn-download-pdf" title="Baixar PDF do servidor para este computador">
                     Baixar PDF
@@ -117,6 +106,46 @@
                         <path fill="currentColor" d="M4 4h16v2H4V4zm0 5h16v2H4V9zm0 5h10v2H4v-2zm0 5h16v2H4v-2z"/>
                     </svg>
                 </button>
+
+                <div class="rail-layout" id="rail-layout">
+                    <button
+                        type="button"
+                        class="rail-btn rail-layout-trigger"
+                        id="btn-layout-menu"
+                        title="Layout: Split"
+                        aria-label="Layout atual: Split. Abrir opções"
+                        aria-haspopup="menu"
+                        aria-expanded="false"
+                        aria-controls="layout-menu"
+                        data-current-layout="split"
+                    >
+                        <svg class="rail-layout-icon is-current" data-layout-icon="split" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                            <path fill="currentColor" d="M3 5h8v14H3V5zm10 0h8v14h-8V5zM5 7v10h4V7H5zm10 0v10h4V7h-4z"/>
+                        </svg>
+                        <svg class="rail-layout-icon" data-layout-icon="editor" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                            <path fill="currentColor" d="M4 5h16v2H4V5zm0 4h12v2H4V9zm0 4h16v2H4v-2zm0 4h10v2H4v-2z"/>
+                        </svg>
+                        <svg class="rail-layout-icon" data-layout-icon="pdf" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                            <path fill="currentColor" d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm8 1.5V9h4.5L14 4.5zM8 12h8v1.5H8V12zm0 3.5h8V17H8v-1.5zm0 3.5h5V20.5H8V19z"/>
+                        </svg>
+                    </button>
+                    <div class="rail-layout-menu" id="layout-menu" role="menu" aria-label="Layout" hidden>
+                        <button type="button" class="layout-btn is-active" role="menuitemradio" aria-checked="true" data-layout="split">
+                            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M3 5h8v14H3V5zm10 0h8v14h-8V5z"/></svg>
+                            Split
+                        </button>
+                        <button type="button" class="layout-btn" role="menuitemradio" aria-checked="false" data-layout="editor">
+                            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M4 5h16v2H4V5zm0 4h12v2H4V9zm0 4h16v2H4v-2zm0 4h10v2H4v-2z"/></svg>
+                            Script
+                        </button>
+                        <button type="button" class="layout-btn" role="menuitemradio" aria-checked="false" data-layout="pdf">
+                            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M6 3h9l5 5v13H6V3zm8 1.5V9h4.5L14 4.5z"/></svg>
+                            Preview
+                        </button>
+                    </div>
+                </div>
+
+                <div class="rail-spacer" aria-hidden="true"></div>
             </nav>
 
             <div class="shell-main">
@@ -192,9 +221,14 @@
 
                     <section class="pane pane-preview" aria-label="PDF">
                         <div class="pane-header">
-                            <h2>PDF</h2>
+                            <h2>Preview</h2>
                             <div class="pane-meta pdf-actions">
                                 <span class="hint" id="preview-mode">Aguardando</span>
+                                <div class="pdf-zoom" id="pdf-zoom" hidden>
+                                    <button type="button" class="btn btn-tiny" id="btn-pdf-zoom-out" title="Diminuir zoom">−</button>
+                                    <button type="button" class="btn btn-tiny pdf-zoom-label" id="btn-pdf-zoom-fit" title="Ajustar à largura">100%</button>
+                                    <button type="button" class="btn btn-tiny" id="btn-pdf-zoom-in" title="Aumentar zoom">+</button>
+                                </div>
                                 <button type="button" class="btn btn-tiny" id="btn-download-pdf-pane" title="Baixar PDF">Baixar</button>
                             </div>
                         </div>
@@ -226,12 +260,17 @@
         <div class="modal-backdrop" data-close-modal></div>
         <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="folder-modal-title">
             <div class="modal-header">
-                <h2 id="folder-modal-title">Pastas no NAS</h2>
+                <h2 id="folder-modal-title">Projetos LaTeX</h2>
                 <button type="button" class="icon-btn" data-close-modal title="Fechar">×</button>
             </div>
-            <p class="modal-hint">Escolha a pasta do projeto no servidor (não no PC). Path atual: <code id="folder-modal-path">/</code></p>
+            <p class="modal-hint">
+                Escolha ou crie a pasta do projeto no servidor (não no PC).
+                Raiz: <code id="folder-modal-root">…</code>
+                · Atual: <code id="folder-modal-path">/</code>
+            </p>
             <div class="modal-toolbar">
                 <button type="button" class="btn btn-secondary" id="folder-modal-up">↑ Pasta acima</button>
+                <button type="button" class="btn btn-secondary" id="folder-modal-new" title="Criar pasta neste nível">＋ Nova pasta</button>
                 <button type="button" class="btn btn-primary" id="folder-modal-open">Abrir esta pasta</button>
             </div>
             <div class="modal-list" id="folder-modal-list"></div>

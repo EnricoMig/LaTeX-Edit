@@ -231,10 +231,24 @@ public class LatexCompileService {
 
     private Path findTexBinDirectory() {
         List<Path> candidates = new ArrayList<>();
+        String userHome = System.getProperty("user.home", "");
         String localAppData = System.getenv("LOCALAPPDATA");
         String userProfile = System.getenv("USERPROFILE");
         String programFiles = System.getenv("ProgramFiles");
 
+        // Linux / TinyTeX / TeX Live
+        if (!userHome.isBlank()) {
+            candidates.add(Path.of(userHome, ".TinyTeX", "bin", "x86_64-linux"));
+            candidates.add(Path.of(userHome, ".TinyTeX", "bin", "aarch64-linux"));
+            candidates.add(Path.of(userHome, "texlive", "2026", "bin", "x86_64-linux"));
+            candidates.add(Path.of(userHome, "texlive", "2025", "bin", "x86_64-linux"));
+            candidates.add(Path.of(userHome, ".local", "bin"));
+        }
+        candidates.add(Path.of("/usr/local/texlive/2026/bin/x86_64-linux"));
+        candidates.add(Path.of("/usr/local/texlive/2025/bin/x86_64-linux"));
+        candidates.add(Path.of("/usr/bin"));
+
+        // Windows MiKTeX / TeX Live
         if (localAppData != null) {
             candidates.add(Path.of(localAppData, "Programs", "MiKTeX", "miktex", "bin", "x64"));
             candidates.add(Path.of(localAppData, "Programs", "MiKTeX", "miktex", "bin", "win64"));
@@ -251,7 +265,14 @@ public class LatexCompileService {
         candidates.add(Path.of("C:\\texlive\\2023\\bin\\windows"));
 
         for (Path candidate : candidates) {
-            if (Files.isDirectory(candidate)) {
+            if (!Files.isDirectory(candidate)) {
+                continue;
+            }
+            // Prefer directories that actually contain a TeX engine
+            if (Files.isRegularFile(candidate.resolve("pdflatex"))
+                    || Files.isRegularFile(candidate.resolve("pdflatex.exe"))
+                    || Files.isRegularFile(candidate.resolve("latexmk"))
+                    || Files.isRegularFile(candidate.resolve("latexmk.exe"))) {
                 return candidate;
             }
         }

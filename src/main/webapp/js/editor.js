@@ -1,36 +1,22 @@
-export const SAMPLE_DOCUMENT = `\\documentclass{article}
-\\usepackage[utf8]{inputenc}
-\\usepackage{amsmath}
+/** Template gerado ao criar uma pasta raiz de projeto. */
+export const DEFAULT_PROJECT_MAIN = `\\documentclass{article}
+\\usepackage{graphicx} % Required for inserting images
 
-\\title{Introdução ao LaTexedit}
-\\author{Seu Nome}
-\\date{\\today}
+\\title{teste}
+\\author{Enrico Migliorini}
+\\date{August 2026}
 
 \\begin{document}
 
 \\maketitle
 
-\\section{Bem-vindo}
-Este é um editor e leitor de \\LaTeX{} no navegador.
-Você pode escrever equações como $E = mc^2$ ou blocos:
-
-\\[
-\\int_{a}^{b} f(x)\\,dx = F(b) - F(a)
-\\]
-
-\\subsection{Ambientes}
-\\begin{itemize}
-  \\item Edite o código à esquerda
-  \\item Veja o preview à direita
-  \\item Salve ou abra arquivos \\texttt{.tex}
-\\end{itemize}
-
-\\begin{theorem}
-A soma dos ângulos internos de um triângulo é $180^\\circ$.
-\\end{theorem}
+\\section{Introduction}
 
 \\end{document}
 `;
+
+/** @deprecated Use DEFAULT_PROJECT_MAIN */
+export const SAMPLE_DOCUMENT = DEFAULT_PROJECT_MAIN;
 
 export function updateLineNumbers(editor, lineNumbersEl) {
     const lines = editor.value.split("\n").length;

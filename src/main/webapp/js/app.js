@@ -1,4 +1,5 @@
 import {
+    DEFAULT_PROJECT_MAIN,
     insertAtCursor,
     insertTab,
     updateCursorMeta,
@@ -8,7 +9,7 @@ import { createExplorer } from "./explorer.js";
 import { applyTheme, getStoredTheme, syncThemeToggle, toggleTheme } from "./theme.js";
 import { WorkspaceFs, baseName, ensureTexExtension, parentPath } from "./workspace-fs.js";
 import { checkHealth, compileProject, getApiBase } from "./api.js";
-import { renderEmbeddedPdf } from "./pdf-viewer.js";
+import { PdfViewer } from "./pdf-viewer.js";
 
 const els = {
     editor: document.getElementById("editor"),
@@ -40,16 +41,26 @@ const els = {
     btnCloseLog: document.getElementById("btn-close-log"),
     btnTheme: document.getElementById("btn-theme"),
     layoutButtons: [...document.querySelectorAll(".layout-btn")],
+    btnLayoutMenu: document.getElementById("btn-layout-menu"),
+    layoutMenu: document.getElementById("layout-menu"),
+    railLayout: document.getElementById("rail-layout"),
+    pdfZoom: document.getElementById("pdf-zoom"),
+    btnPdfZoomIn: document.getElementById("btn-pdf-zoom-in"),
+    btnPdfZoomOut: document.getElementById("btn-pdf-zoom-out"),
+    btnPdfZoomFit: document.getElementById("btn-pdf-zoom-fit"),
     inputTex: document.getElementById("input-tex"),
     inputPdf: document.getElementById("input-pdf"),
     folderModal: document.getElementById("folder-modal"),
+    folderModalRoot: document.getElementById("folder-modal-root"),
     folderModalPath: document.getElementById("folder-modal-path"),
     folderModalList: document.getElementById("folder-modal-list"),
     folderModalUp: document.getElementById("folder-modal-up"),
+    folderModalNew: document.getElementById("folder-modal-new"),
     folderModalOpen: document.getElementById("folder-modal-open"),
 };
 
 const fs = new WorkspaceFs();
+const pdfViewer = new PdfViewer();
 let isDirty = false;
 let suppressNameBlur = false;
 let viewerPdfPath = "";
@@ -59,6 +70,8 @@ let layoutMode = localStorage.getItem("latexedit.layout") || "split";
 if (!["split", "editor", "pdf"].includes(layoutMode)) {
     layoutMode = "split";
 }
+let pdfResizeObserver = null;
+let pdfFitTimer = null;
 
 const AUTO_COMPILE_MS = 2200;
 let autoCompileTimer = null;
@@ -105,13 +118,88 @@ function applyExplorerVisibility() {
     localStorage.setItem("latexedit.explorerOpen", explorerOpen ? "1" : "0");
 }
 
+function setLayoutMenuOpen(open) {
+    if (!els.layoutMenu || !els.btnLayoutMenu) {
+        return;
+    }
+    els.layoutMenu.hidden = !open;
+    els.btnLayoutMenu.setAttribute("aria-expanded", String(open));
+    els.btnLayoutMenu.classList.toggle("is-open", open);
+}
+
+function syncLayoutTriggerIcon() {
+    if (!els.btnLayoutMenu) {
+        return;
+    }
+    els.btnLayoutMenu.querySelectorAll("[data-layout-icon]").forEach((icon) => {
+        icon.classList.toggle("is-current", icon.getAttribute("data-layout-icon") === layoutMode);
+    });
+    const labels = { split: "Split", editor: "Script", pdf: "Preview" };
+    const label = labels[layoutMode] || "Layout";
+    els.btnLayoutMenu.dataset.currentLayout = layoutMode;
+    els.btnLayoutMenu.title = `Layout: ${label}`;
+    els.btnLayoutMenu.setAttribute("aria-label", `Layout atual: ${label}. Abrir opções`);
+}
+
+function updatePdfZoomLabel(percent, fitMode) {
+    if (!els.btnPdfZoomFit) {
+        return;
+    }
+    els.btnPdfZoomFit.textContent = `${percent}%`;
+    els.btnPdfZoomFit.title =
+        fitMode === "width" ? "Ajustado à largura — clique para reajustar" : "Clique para ajustar à largura";
+}
+
+function setPdfZoomVisible(visible) {
+    if (els.pdfZoom) {
+        els.pdfZoom.hidden = !visible;
+    }
+}
+
+function schedulePdfFit() {
+    if (!pdfViewer.pdf || !els.preview.classList.contains("is-pdf")) {
+        return;
+    }
+    window.clearTimeout(pdfFitTimer);
+    pdfFitTimer = window.setTimeout(() => {
+        if (pdfViewer.fitMode === "manual") {
+            return;
+        }
+        pdfViewer.fitWidth().catch((error) => {
+            console.warn("Falha ao reajustar PDF:", error);
+        });
+    }, 120);
+}
+
+function watchPdfHost(host) {
+    if (pdfResizeObserver) {
+        pdfResizeObserver.disconnect();
+        pdfResizeObserver = null;
+    }
+    if (!host || typeof ResizeObserver === "undefined") {
+        return;
+    }
+    pdfResizeObserver = new ResizeObserver(() => {
+        schedulePdfFit();
+    });
+    pdfResizeObserver.observe(host);
+}
+
 function applyLayoutMode() {
     els.workspace.classList.remove("layout-split", "layout-editor", "layout-pdf");
     els.workspace.classList.add(`layout-${layoutMode}`);
     els.layoutButtons.forEach((btn) => {
-        btn.classList.toggle("is-active", btn.dataset.layout === layoutMode);
+        const active = btn.dataset.layout === layoutMode;
+        btn.classList.toggle("is-active", active);
+        btn.setAttribute("aria-checked", String(active));
     });
+    syncLayoutTriggerIcon();
     localStorage.setItem("latexedit.layout", layoutMode);
+    if (layoutMode === "pdf" && pdfViewer.pdf) {
+        window.requestAnimationFrame(() => {
+            pdfViewer.fitWidth().catch(() => {});
+        });
+    }
 }
 
 function setLogOpen(open, { focus = false } = {}) {
@@ -130,6 +218,12 @@ function setCompileLog(text) {
 
 function showViewerMessage(title, bodyHtml) {
     viewerPdfPath = "";
+    pdfViewer.clear();
+    setPdfZoomVisible(false);
+    if (pdfResizeObserver) {
+        pdfResizeObserver.disconnect();
+        pdfResizeObserver = null;
+    }
     els.previewMode.textContent = "Aguardando PDF";
     els.preview.classList.remove("is-pdf");
     els.preview.innerHTML = `
@@ -171,7 +265,13 @@ async function renderPdfViewer(path) {
             </div>
         `;
         const host = document.getElementById("pdfjs-host");
-        await renderEmbeddedPdf(host, url);
+        pdfViewer.onScaleChange = (percent, fitMode) => {
+            updatePdfZoomLabel(percent, fitMode);
+        };
+        await pdfViewer.open(host, url, { fit: "width" });
+        setPdfZoomVisible(true);
+        updatePdfZoomLabel(pdfViewer.getScalePercent(), pdfViewer.fitMode);
+        watchPdfHost(host);
     } catch (error) {
         console.error("Erro ao abrir PDF:", error);
         showViewerMessage("PDF indisponível", `<p>${error.message || "Não foi possível abrir o PDF."}</p>`);
@@ -237,6 +337,7 @@ function ensureFolderOrWarn() {
 }
 
 let folderBrowserPath = "";
+let workspaceAbsoluteRoot = "";
 
 function closeFolderModal() {
     if (els.folderModal) {
@@ -244,34 +345,85 @@ function closeFolderModal() {
     }
 }
 
+function joinWorkspacePath(parent, name) {
+    const base = parent ? parent.replace(/\/+$/, "") : "";
+    const leaf = String(name || "").trim().replace(/^\/+|\/+$/g, "");
+    return base ? `${base}/${leaf}` : leaf;
+}
+
 async function refreshFolderModal() {
     els.folderModalPath.textContent = folderBrowserPath ? `/${folderBrowserPath}` : "/";
+    if (els.folderModalRoot) {
+        els.folderModalRoot.textContent = workspaceAbsoluteRoot || "…";
+        els.folderModalRoot.title = workspaceAbsoluteRoot || "";
+    }
     els.folderModalList.innerHTML = `<p class="modal-loading">Carregando…</p>`;
     try {
         const items = await fs.listServerDir(folderBrowserPath);
         const dirs = items.filter((i) => i.type === "dir");
         if (dirs.length === 0) {
-            els.folderModalList.innerHTML =
-                `<p class="modal-empty">Nenhuma subpasta aqui. Você pode abrir esta pasta mesmo assim.</p>`;
+            els.folderModalList.innerHTML = `
+                <div class="modal-empty">
+                    <p>Nenhuma subpasta aqui.</p>
+                    <p>Crie um projeto com <strong>Nova pasta</strong> ou abra este nível mesmo assim.</p>
+                    <button type="button" class="btn btn-secondary" id="folder-modal-empty-new">＋ Nova pasta</button>
+                </div>`;
+            els.folderModalList.querySelector("#folder-modal-empty-new")?.addEventListener("click", () => {
+                createFolderInBrowser();
+            });
             return;
         }
         els.folderModalList.innerHTML = dirs
             .map(
                 (dir) => `
-            <button type="button" class="modal-row" data-path="${dir.path}">
+            <button type="button" class="modal-row" data-path="${escapeHtml(dir.path)}" title="Clique para entrar · duplo clique para abrir">
               <span class="modal-row-icon" aria-hidden="true">DIR</span>
-              <span>${dir.name}</span>
+              <span>${escapeHtml(dir.name)}</span>
             </button>`
             )
             .join("");
     } catch (error) {
-        els.folderModalList.innerHTML = `<p class="modal-empty">${error.message || "Falha ao listar pastas."}</p>`;
+        els.folderModalList.innerHTML = `<p class="modal-empty">${escapeHtml(error.message || "Falha ao listar pastas.")}</p>`;
+    }
+}
+
+async function createFolderInBrowser() {
+    const suggested = "meu-projeto";
+    const raw = window.prompt("Nome da nova pasta de projeto:", suggested);
+    if (raw == null) {
+        return;
+    }
+    const name = raw.trim().replace(/[\\/]+/g, "-").replace(/^\.+/, "");
+    if (!name) {
+        window.alert("Informe um nome válido para a pasta.");
+        return;
+    }
+    const atWorkspaceRoot = !folderBrowserPath;
+    const path = joinWorkspacePath(folderBrowserPath, name);
+    try {
+        await fs.mkdirAtWorkspace(path);
+        if (atWorkspaceRoot) {
+            await fs.createFileAtWorkspace(`${path}/main.tex`, DEFAULT_PROJECT_MAIN);
+        }
+        folderBrowserPath = path;
+        await refreshFolderModal();
+        setStatus("idle", atWorkspaceRoot ? "Projeto criado com main.tex" : "Pasta criada");
+    } catch (error) {
+        console.error("Erro ao criar pasta:", error);
+        window.alert(error.message || "Não foi possível criar a pasta.");
     }
 }
 
 async function openProjectFolder() {
     try {
         await checkHealth();
+        try {
+            const info = await fs.getWorkspaceInfo();
+            workspaceAbsoluteRoot = info.absoluteRoot || info.workspaceRoot || "";
+        } catch (infoError) {
+            console.warn("Não foi possível ler info do workspace:", infoError);
+            workspaceAbsoluteRoot = "";
+        }
     } catch (error) {
         window.alert(`Backend indisponível em ${getApiBase()}\n\n${error.message || ""}`);
         return;
@@ -597,6 +749,10 @@ async function renameActiveFile(nextName) {
         try {
             const renamed = await fs.renamePath(path, desired);
             syncDocNameInput(renamed);
+            if (viewerPdfPath === path) {
+                viewerPdfPath = renamed;
+                els.previewMode.textContent = baseName(renamed);
+            }
             explorer.render();
             touchAutosaveHint();
             setStatus("idle", "Renomeado");
@@ -740,6 +896,24 @@ function bindEvents() {
     els.btnExportPdf.addEventListener("click", () => compilePdf({ auto: false }));
     els.btnDownloadPdf?.addEventListener("click", downloadPdfFromServer);
     els.btnDownloadPdfPane?.addEventListener("click", downloadPdfFromServer);
+    els.btnPdfZoomIn?.addEventListener("click", async () => {
+        if (!pdfViewer.pdf) {
+            return;
+        }
+        await pdfViewer.zoomIn();
+    });
+    els.btnPdfZoomOut?.addEventListener("click", async () => {
+        if (!pdfViewer.pdf) {
+            return;
+        }
+        await pdfViewer.zoomOut();
+    });
+    els.btnPdfZoomFit?.addEventListener("click", async () => {
+        if (!pdfViewer.pdf) {
+            return;
+        }
+        await pdfViewer.fitWidth();
+    });
 
     els.folderModal?.querySelectorAll("[data-close-modal]").forEach((el) => {
         el.addEventListener("click", closeFolderModal);
@@ -748,6 +922,7 @@ function bindEvents() {
         folderBrowserPath = parentPath(folderBrowserPath);
         await refreshFolderModal();
     });
+    els.folderModalNew?.addEventListener("click", () => createFolderInBrowser());
     els.folderModalOpen?.addEventListener("click", confirmOpenServerFolder);
     els.folderModalList?.addEventListener("click", async (event) => {
         const row = event.target.closest("[data-path]");
@@ -776,18 +951,36 @@ function bindEvents() {
     els.btnCloseLog.addEventListener("click", () => {
         setLogOpen(false);
     });
+    els.btnLayoutMenu?.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setLayoutMenuOpen(els.layoutMenu.hidden);
+    });
     els.layoutButtons.forEach((btn) => {
         btn.addEventListener("click", () => {
             layoutMode = btn.dataset.layout;
             applyLayoutMode();
+            setLayoutMenuOpen(false);
         });
     });
+    document.addEventListener("click", (event) => {
+        if (!els.railLayout || els.layoutMenu?.hidden) {
+            return;
+        }
+        if (!els.railLayout.contains(event.target)) {
+            setLayoutMenuOpen(false);
+        }
+    });
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && els.layoutMenu && !els.layoutMenu.hidden) {
+            setLayoutMenuOpen(false);
+        }
+    });
 
-    els.docName.addEventListener("keydown", (event) => {
+    els.docName.addEventListener("keydown", async (event) => {
         if (event.key === "Enter") {
             event.preventDefault();
             suppressNameBlur = true;
-            renameActiveFile(els.docName.value);
+            await renameActiveFile(els.docName.value);
             els.editor.focus();
             window.setTimeout(() => {
                 suppressNameBlur = false;

@@ -194,6 +194,34 @@ export class WorkspaceFs {
         return data.items || [];
     }
 
+    async getWorkspaceInfo() {
+        return apiJson("GET", "/api/fs/info");
+    }
+
+    /**
+     * Cria pasta relativa à raiz do workspace (não à pasta de projeto aberta).
+     */
+    async mkdirAtWorkspace(relative) {
+        const path = normalizePath(relative);
+        if (!path) {
+            throw new Error("Informe um nome de pasta.");
+        }
+        await apiJson("POST", "/api/fs/mkdir", { path });
+        return path;
+    }
+
+    /**
+     * Cria arquivo relativo à raiz do workspace (não à pasta de projeto aberta).
+     */
+    async createFileAtWorkspace(relative, content = "") {
+        const path = normalizePath(relative);
+        if (!path) {
+            throw new Error("Informe um caminho de arquivo.");
+        }
+        await apiJson("POST", "/api/fs/create", { path, content: content ?? "" });
+        return path;
+    }
+
     async openServerFolder(projectRelative) {
         const root = normalizePath(projectRelative);
         const data = await apiJson("GET", `/api/fs/tree?path=${encodeURIComponent(root)}`);
@@ -353,10 +381,16 @@ export class WorkspaceFs {
     async renamePath(path, nextName) {
         const key = normalizePath(path);
         const parent = parentPath(key);
-        const targetName = this.isTextFile(key) && !PDF_EXT.test(nextName)
-            ? ensureTexExtension(nextName)
-            : nextName.trim();
+        let targetName = nextName.trim();
+        if (this.isPdf(key) && !PDF_EXT.test(targetName)) {
+            targetName = `${targetName.replace(/\.pdf$/i, "")}.pdf`;
+        } else if (this.isTextFile(key) && !PDF_EXT.test(targetName)) {
+            targetName = ensureTexExtension(targetName);
+        }
         const dest = parent ? `${parent}/${targetName}` : targetName;
+        if (normalizePath(dest) === key) {
+            return key;
+        }
         await apiJson("POST", "/api/fs/rename", {
             from: this.fullPath(key),
             to: this.fullPath(dest),

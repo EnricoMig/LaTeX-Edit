@@ -73,9 +73,20 @@ public final class AppConfig {
     }
 
     /**
-     * Raiz dos projetos no servidor (NAS). Override: LATEX_WORKSPACEROOT.
+     * Raiz dos projetos no servidor (NAS/Tomcat). Override: LATEX_WORKSPACEROOT.
+     * Caminhos relativos resolvem contra catalina.base (Tomcat) ou user.home.
      */
     public static String workspaceRoot() {
-        return get("latex.workspaceRoot", "./workspace");
+        String configured = get("latex.workspaceRoot", "latex-workspace");
+        java.nio.file.Path path = java.nio.file.Path.of(configured);
+        if (path.isAbsolute()) {
+            return path.normalize().toString();
+        }
+        String catalinaBase = System.getProperty("catalina.base");
+        if (catalinaBase != null && !catalinaBase.isBlank()) {
+            return java.nio.file.Path.of(catalinaBase, configured).normalize().toString();
+        }
+        String home = System.getProperty("user.home", ".");
+        return java.nio.file.Path.of(home, "Documentos", "LaTeX", configured).normalize().toString();
     }
 }

@@ -153,6 +153,11 @@ textarea {
     background: color-mix(in srgb, var(--paper-raised) 92%, var(--ink) 5%);
 }
 
+.rail-spacer {
+    flex: 1 1 auto;
+    min-height: 0.75rem;
+}
+
 .rail-btn {
     appearance: none;
     width: 2.25rem;
@@ -179,34 +184,92 @@ textarea {
     border-color: color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
-.layout-switch {
-    display: inline-flex;
+.rail-layout {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.rail-layout-trigger {
+    position: relative;
+}
+
+.rail-layout-trigger .rail-layout-icon {
+    display: none;
+    pointer-events: none;
+}
+
+.rail-layout-trigger .rail-layout-icon.is-current {
+    display: block;
+}
+
+.rail-layout-trigger.is-open {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.rail-layout-menu {
+    position: absolute;
+    left: calc(100% + 0.45rem);
+    top: 0;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    min-width: 8.25rem;
+    padding: 0.3rem;
     border: 1px solid var(--line-strong);
-    border-radius: 8px;
-    overflow: hidden;
+    border-radius: 10px;
     background: var(--paper-raised);
+    box-shadow: var(--shadow-menu);
+    gap: 0.15rem;
+}
+
+.rail-layout-menu[hidden] {
+    display: none !important;
 }
 
 .layout-btn {
     appearance: none;
+    width: 100%;
     border: 0;
+    border-radius: 7px;
     background: transparent;
     color: var(--ink-muted);
-    font-size: 0.72rem;
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
     font-weight: 600;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-    padding: 0.35rem 0.55rem;
+    letter-spacing: 0.02em;
+    text-align: left;
+    padding: 0.45rem 0.65rem;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
 }
 
-.layout-btn + .layout-btn {
-    border-left: 1px solid var(--line);
+.layout-btn:hover {
+    background: var(--surface-hover);
+    color: var(--ink);
 }
 
 .layout-btn.is-active {
     background: var(--accent-soft);
     color: var(--accent);
+}
+
+.layout-btn svg {
+    flex: 0 0 auto;
+}
+
+@media (max-width: 720px) {
+    .rail-layout-menu {
+        left: 50%;
+        top: calc(100% + 0.4rem);
+        transform: translateX(-50%);
+        min-width: 7rem;
+    }
 }
 
 .btn-recompile {
@@ -551,10 +614,20 @@ html[data-theme="dark"] .theme-icon-sun {
 
 .workspace.layout-pdf .pane-preview {
     flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
 }
 
 .workspace.layout-pdf.is-explorer-collapsed .pane-preview {
     flex: 1 1 auto;
+}
+
+.workspace.layout-pdf .preview-paper.is-pdf {
+    padding: 0;
+}
+
+.workspace.layout-pdf .pdfjs-host {
+    padding: 0.85rem 1rem 1.25rem;
 }
 
 .log-panel {
@@ -850,28 +923,55 @@ html[data-theme="dark"] .theme-icon-sun {
 
 .pdf-stage {
     position: relative;
-    flex: 1;
+    flex: 1 1 auto;
     min-height: 0;
+    height: 100%;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
-.pdfjs-host,
-.pdfjs-stage {
-    flex: 1;
+.pdf-zoom {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+}
+
+.pdf-zoom[hidden] {
+    display: none !important;
+}
+
+.pdf-zoom-label {
+    min-width: 3.1rem;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Único viewport de rolagem do PDF — barra fica fixa na lateral do painel */
+.pdfjs-host {
+    flex: 1 1 auto;
     min-height: 0;
+    min-width: 0;
     overflow: auto;
+    overscroll-behavior: contain;
     padding: 0.75rem;
+}
+
+.pdfjs-stage {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 0.85rem;
+    width: max-content;
+    min-width: 100%;
+    margin: 0 auto;
+    /* conteúdo cresce; não cria scrollbar própria */
+    overflow: visible;
+    height: auto;
 }
 
 .pdfjs-page {
     display: block;
-    max-width: 100%;
-    height: auto;
+    flex: 0 0 auto;
     background: #fff;
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
 }
@@ -895,6 +995,8 @@ html[data-theme="dark"] .theme-icon-sun {
     padding: 0;
     display: flex;
     flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
     background: #1a1f27;
 }
 
@@ -909,7 +1011,7 @@ html[data-theme="dark"] .theme-icon-sun {
     padding: 0.2rem 0.45rem;
     border-radius: 6px;
     border: 1px solid var(--line);
-    background: var(--panel);
+    background: var(--paper-raised);
     color: var(--ink);
     cursor: pointer;
 }
@@ -926,7 +1028,7 @@ html[data-theme="dark"] .theme-icon-sun {
     padding: 0.45rem 0.75rem;
     border-radius: 8px;
     border: 1px solid var(--line);
-    background: var(--panel);
+    background: var(--paper-deep);
     color: var(--ink);
     cursor: pointer;
 }
@@ -962,9 +1064,11 @@ html[data-theme="dark"] .theme-icon-sun {
     gap: 0.65rem;
     padding: 1rem 1.1rem 1.1rem;
     border-radius: 14px;
-    border: 1px solid var(--line);
-    background: var(--panel);
-    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--line-strong);
+    background: var(--paper-raised);
+    color: var(--ink);
+    opacity: 1;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
 }
 
 .modal-header {
@@ -998,6 +1102,7 @@ html[data-theme="dark"] .theme-icon-sun {
     border: 1px solid var(--line);
     border-radius: 10px;
     padding: 0.35rem;
+    background: var(--paper-deep);
 }
 
 .modal-row {
@@ -1031,6 +1136,21 @@ html[data-theme="dark"] .theme-icon-sun {
     margin: 0.75rem;
     color: var(--ink-soft);
     font-size: 0.88rem;
+}
+
+.modal-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.55rem;
+}
+
+.modal-empty p {
+    margin: 0;
+}
+
+.modal-hint code {
+    word-break: break-all;
 }
 
 .pdf-frame {

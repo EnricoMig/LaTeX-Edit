@@ -254,6 +254,9 @@ public class WorkspaceService {
         if (!Files.exists(source)) {
             throw new IOException("Origem não encontrada: " + from);
         }
+        if (source.equals(dest)) {
+            return;
+        }
         if (Files.exists(dest)) {
             throw new IOException("Destino já existe: " + to);
         }
@@ -261,7 +264,16 @@ public class WorkspaceService {
         if (parent != null) {
             Files.createDirectories(parent);
         }
-        Files.move(source, dest);
+        try {
+            Files.move(source, dest);
+        } catch (IOException error) {
+            String detail = error.getMessage() == null ? "" : error.getMessage();
+            // Evita expor paths absolutos crus do NIO (ex.: "a -> b")
+            if (detail.contains(" -> ")) {
+                throw new IOException("Não foi possível renomear '" + from + "' para '" + to + "'.", error);
+            }
+            throw error;
+        }
     }
 
     public Map<String, byte[]> collectProjectFiles(String projectRelative) throws IOException {

@@ -29,6 +29,7 @@ export function createExplorer({
 }) {
     let contextPath = null;
     let renamingPath = null;
+    let renameInFlight = false;
 
     const contextMenu = document.createElement("div");
     contextMenu.className = "context-menu";
@@ -87,14 +88,19 @@ export function createExplorer({
     }
 
     async function commitRename(path, nextName) {
+        if (renameInFlight) {
+            return;
+        }
+        const pendingPath = path;
         renamingPath = null;
         const trimmed = nextName.trim();
-        if (!trimmed || trimmed === baseName(path)) {
+        if (!trimmed || trimmed === baseName(pendingPath)) {
             render();
             return;
         }
+        renameInFlight = true;
         try {
-            const renamed = await fs.renamePath(path, trimmed);
+            const renamed = await fs.renamePath(pendingPath, trimmed);
             onTreeChanged?.();
             if (fs.isFile(renamed)) {
                 onOpenFile?.(renamed, { force: true });
@@ -104,6 +110,8 @@ export function createExplorer({
         } catch (error) {
             window.alert(error.message || "Não foi possível renomear.");
             render();
+        } finally {
+            renameInFlight = false;
         }
     }
 
@@ -296,6 +304,7 @@ export function createExplorer({
         }
         if (event.key === "Enter") {
             event.preventDefault();
+            event.target.dataset.renameCommitted = "1";
             commitRename(event.target.dataset.rename, event.target.value);
         }
         if (event.key === "Escape") {
@@ -309,6 +318,9 @@ export function createExplorer({
         "blur",
         (event) => {
             if (!event.target.matches("input.tree-rename")) {
+                return;
+            }
+            if (event.target.dataset.renameCommitted === "1") {
                 return;
             }
             commitRename(event.target.dataset.rename, event.target.value);
