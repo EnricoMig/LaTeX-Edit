@@ -1,0 +1,12 @@
+# Build
+target/
+.idea/
+*.iml
+.git/
+.gitignore
+**/node_modules/
+terminals/
+assets/
+*.md
+!README.md
+.cursorrules

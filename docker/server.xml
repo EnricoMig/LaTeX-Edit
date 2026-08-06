@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Server port="8005" shutdown="SHUTDOWN">
+  <Listener className="org.apache.catalina.startup.VersionLoggerListener" />
+  <Listener className="org.apache.catalina.core.AprLifecycleListener" SSLEngine="on" />
+  <Listener className="org.apache.catalina.core.JreMemoryLeakPreventionListener" />
+  <Listener className="org.apache.catalina.mbeans.GlobalResourcesLifecycleListener" />
+  <Listener className="org.apache.catalina.core.ThreadLocalLeakPreventionListener" />
+
+  <Service name="Catalina">
+    <!-- HTTP interno (healthcheck / debug) -->
+    <Connector port="8080" protocol="HTTP/1.1"
+               connectionTimeout="20000"
+               redirectPort="8443"
+               maxParameterCount="1000" />
+
+    <!-- HTTPS público — necessário para Abrir pasta no Chrome (secure context) -->
+    <Connector port="8443" protocol="org.apache.coyote.http11.Http11NioProtocol"
+               maxThreads="150"
+               SSLEnabled="true"
+               maxParameterCount="1000"
+               compression="on">
+      <SSLHostConfig>
+        <Certificate certificateKeystoreFile="conf/keystore.p12"
+                     certificateKeystorePassword="changeit"
+                     type="RSA" />
+      </SSLHostConfig>
+    </Connector>
+
+    <Engine name="Catalina" defaultHost="localhost">
+      <Host name="localhost" appBase="webapps" unpackWARs="true" autoDeploy="true" />
+    </Engine>
+  </Service>
+</Server>

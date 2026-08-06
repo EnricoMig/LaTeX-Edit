@@ -1,0 +1,21 @@
+# Compose pronto para colar no CasaOS (Custom Install).
+name: latexedit
+
+services:
+  latexedit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: latexedit:local
+    container_name: latexedit
+    restart: unless-stopped
+    ports:
+      - "8095:8443"
+      - "8096:8080"
+    environment:
+      LATEX_ENGINE: pdflatex
+      LATEX_TIMEOUTSECONDS: "120"
+      LATEX_PASSES: "2"
+      TLS_SAN_EXTRA: "IP:192.168.0.3"
+      TZ: America/Sao_Paulo
+    mem_limit: 2g
