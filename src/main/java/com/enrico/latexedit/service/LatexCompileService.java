@@ -62,6 +62,10 @@ public class LatexCompileService {
             int passes = AppConfig.latexPasses();
             int lastExit = -1;
 
+            // Evita falso sucesso: PDFs antigos do projeto não podem ser tratados como saída nova
+            Path pdfPath = resolvePdfPath(workDir, mainPath);
+            Files.deleteIfExists(pdfPath);
+
             for (int pass = 1; pass <= passes; pass++) {
                 ProcessResult result = runEngine(engine, workDir, mainPath);
                 log.append("=== Passo ").append(pass).append(" (").append(engine).append(") ===\n");
@@ -72,7 +76,6 @@ public class LatexCompileService {
                 }
             }
 
-            Path pdfPath = resolvePdfPath(workDir, mainPath);
             if (Files.isRegularFile(pdfPath)) {
                 byte[] pdf = Files.readAllBytes(pdfPath);
                 return CompileResult.ok(pdf, log.toString(), engine);

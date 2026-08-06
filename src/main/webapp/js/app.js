@@ -651,21 +651,23 @@ async function compilePdf({ auto = false } = {}) {
             setStatus("error", "Erro ao gerar PDF");
             touchAutosaveHint("Geração falhou");
             setCompileLog(logTail || result.message || "Sem log");
+            setPdfBusy(false);
             if (!auto) {
                 setLogOpen(true, { focus: true });
             }
-            setPdfBusy(false);
-            if (!viewerPdfPath) {
-                showViewerMessage(
-                    "Falha na geração",
-                    `<p>${escapeHtml(result.message || "Veja o painel Logs.")}</p>
-                     <p>Compilando: <code>${escapeHtml(mainPath)}</code></p>`
-                );
-            }
+            // Não mantém PDF antigo como se fosse o resultado atual
+            showViewerMessage(
+                "Falha na geração",
+                `<p>${escapeHtml(result.message || "Veja o painel Logs.")}</p>
+                 <p>Compilando: <code>${escapeHtml(mainPath)}</code></p>
+                 <p class="hint">O preview anterior foi descartado para não exibir PDF desatualizado.</p>`
+            );
             return;
         }
 
         const savedPath = await fs.saveCompiledPdf(mainPath, null, result.pdfPath);
+        // Força novo blob (sem cache do PDF anterior)
+        fs.revokePdfUrl(savedPath);
         await fs.refreshTree();
         explorer.render();
         setCompileLog(result.log || "PDF gerado no NAS.");
@@ -857,6 +859,7 @@ const explorer = createExplorer({
     onRequestConfirm: async (message) => window.confirm(message),
     onRequireFolder: openProjectFolder,
 });
+
 
 function bindEvents() {
     els.editor.addEventListener("input", () => {
