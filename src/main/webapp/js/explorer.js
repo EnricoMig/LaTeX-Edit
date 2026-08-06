@@ -45,6 +45,23 @@ export function createExplorer({
     let renameInFlight = false;
     let moveInFlight = false;
     let dragSourcePath = null;
+    let mainPosition = localStorage.getItem("latexedit.mainSort") === "below" ? "below" : "above";
+
+    const btnMainAbove = rootEl.querySelector("#btn-main-sort-above");
+    const btnMainBelow = rootEl.querySelector("#btn-main-sort-below");
+
+    function syncMainSortButtons() {
+        btnMainAbove?.setAttribute("aria-pressed", String(mainPosition === "above"));
+        btnMainBelow?.setAttribute("aria-pressed", String(mainPosition === "below"));
+    }
+
+    function setMainPosition(position) {
+        mainPosition = position === "below" ? "below" : "above";
+        localStorage.setItem("latexedit.mainSort", mainPosition);
+        syncMainSortButtons();
+        render();
+    }
+
     const contextMenu = document.createElement("div");
     contextMenu.className = "context-menu";
     contextMenu.hidden = true;
@@ -299,7 +316,7 @@ export function createExplorer({
             return;
         }
 
-        const rows = fs.buildTreeRows();
+        const rows = fs.buildTreeRows({ mainPosition });
         if (rows.length === 0) {
             treeEl.innerHTML = `
                 <div class="explorer-empty-state">
@@ -526,6 +543,9 @@ export function createExplorer({
         promptNewItem("dir", parent);
     });
 
+    btnMainAbove?.addEventListener("click", () => setMainPosition("above"));
+    btnMainBelow?.addEventListener("click", () => setMainPosition("below"));
+    syncMainSortButtons();
 
     return {
         render,

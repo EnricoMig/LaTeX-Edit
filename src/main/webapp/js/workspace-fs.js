@@ -278,10 +278,10 @@ export class WorkspaceFs {
         throw new Error("Use o seletor de pastas do servidor.");
     }
 
-
-    buildTreeRows() {
+    buildTreeRows({ mainPosition = "above" } = {}) {
         const rows = [];
         const byParent = new Map();
+        const pinMain = mainPosition === "below" ? "below" : "above";
 
         for (const [path, meta] of Object.entries(this.workspace.entries)) {
             const parent = parentPath(path);
@@ -296,10 +296,46 @@ export class WorkspaceFs {
             });
         }
 
+        const isMainFile = (name) => {
+            const lower = String(name || "").toLowerCase();
+            return lower === "main.tex" || lower === "main.pdf";
+        };
+
+        const groupOf = (entry) => {
+            const isMain = entry.type === "file" && isMainFile(entry.name);
+            if (pinMain === "above") {
+                if (isMain) {
+                    return 0;
+                }
+                if (entry.type === "dir") {
+                    return 1;
+                }
+                return 2;
+            }
+            // main abaixo das subpastas
+            if (entry.type === "dir") {
+                return 0;
+            }
+            if (isMain) {
+                return 1;
+            }
+            return 2;
+        };
+
         const sortSiblings = (list) => {
             list.sort((a, b) => {
-                if (a.type !== b.type) {
-                    return a.type === "dir" ? -1 : 1;
+                const groupDiff = groupOf(a) - groupOf(b);
+                if (groupDiff !== 0) {
+                    return groupDiff;
+                }
+                // main.tex antes de main.pdf
+                if (isMainFile(a.name) && isMainFile(b.name)) {
+                    if (a.name.toLowerCase().endsWith(".tex") && b.name.toLowerCase().endsWith(".pdf")) {
+                        return -1;
+                    }
+                    if (a.name.toLowerCase().endsWith(".pdf") && b.name.toLowerCase().endsWith(".tex")) {
+                        return 1;
+                    }
                 }
                 return a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" });
             });
@@ -325,7 +361,6 @@ export class WorkspaceFs {
         walk("", 0);
         return rows;
     }
-
 
     async readFile(path) {
         const key = normalizePath(path);
@@ -477,7 +512,6 @@ export class WorkspaceFs {
         const dest = destParent ? `${destParent}/${baseName(key)}` : baseName(key);
         return this.relocate(key, dest);
     }
-
 
     resolveMainDocument(preferredPath) {
         const preferred = normalizePath(preferredPath);

@@ -172,6 +172,26 @@
                             <button type="button" class="project-title" id="project-title" title="Pasta do projeto">
                                 Nenhuma pasta
                             </button>
+                            <div class="explorer-sort" role="group" aria-label="Posição do main.tex e main.pdf">
+                                <button
+                                    type="button"
+                                    class="sort-btn"
+                                    id="btn-main-sort-above"
+                                    title="main.tex / main.pdf acima das pastas"
+                                    aria-pressed="true"
+                                >
+                                    main ↑
+                                </button>
+                                <button
+                                    type="button"
+                                    class="sort-btn"
+                                    id="btn-main-sort-below"
+                                    title="main.tex / main.pdf abaixo das pastas"
+                                    aria-pressed="false"
+                                >
+                                    main ↓
+                                </button>
+                            </div>
                         </div>
                         <div class="explorer-tree" id="explorer-tree" role="tree" aria-label="Árvore do projeto"></div>
                         <input type="file" id="input-tex" accept=".tex,.txt,.bib,.sty,.cls,text/x-tex,text/plain" hidden>

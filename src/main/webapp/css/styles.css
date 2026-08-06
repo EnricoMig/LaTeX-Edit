@@ -709,7 +709,10 @@ html[data-theme="dark"] .theme-icon-sun {
 }
 
 .explorer-project {
-    padding: 0.35rem 0.75rem 0.15rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.75rem 0.35rem;
     border-bottom: 1px solid var(--line);
 }
 
@@ -719,7 +722,8 @@ html[data-theme="dark"] .theme-icon-sun {
     background: transparent;
     padding: 0;
     margin: 0;
-    max-width: 100%;
+    min-width: 0;
+    flex: 1 1 auto;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -729,8 +733,44 @@ html[data-theme="dark"] .theme-icon-sun {
     color: var(--ink-soft);
     cursor: default;
     text-align: left;
-    width: 100%;
 }
+
+.explorer-sort {
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 0.15rem;
+    padding: 0.1rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--paper-raised) 80%, transparent);
+}
+
+.sort-btn {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--ink-muted);
+    border-radius: 4px;
+    padding: 0.15rem 0.35rem;
+    font-family: var(--font-ui);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.sort-btn:hover {
+    color: var(--ink-soft);
+    background: color-mix(in srgb, var(--accent-soft) 55%, transparent);
+}
+
+.sort-btn[aria-pressed="true"] {
+    color: var(--accent-hover);
+    background: var(--accent-soft);
+}
+
 
 .explorer-actions {
     display: flex;
