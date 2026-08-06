@@ -195,13 +195,13 @@ export function createExplorer({
 
     function render() {
         titleEl.textContent = fs.isOpen() ? fs.getName() : "Nenhuma pasta";
-        titleEl.title = fs.isOpen() ? fs.getName() : "Abra uma pasta raiz";
+        titleEl.title = fs.isOpen() ? `NAS: ${fs.getName()}` : "Abra uma pasta no NAS";
 
         if (!fs.isOpen()) {
             treeEl.innerHTML = `
                 <div class="explorer-empty-state">
-                    <p>Abra a pasta raiz do seu projeto LaTeX para editar os arquivos <code>.tex</code> no disco.</p>
-                    <button type="button" class="btn btn-primary" id="explorer-open-folder">Abrir pasta</button>
+                    <p>Abra uma pasta do <strong>NAS</strong> (servidor) para editar os arquivos <code>.tex</code>.</p>
+                    <button type="button" class="btn btn-primary" id="explorer-open-folder">Abrir pasta no NAS</button>
                 </div>
             `;
             treeEl.querySelector("#explorer-open-folder")?.addEventListener("click", () => {

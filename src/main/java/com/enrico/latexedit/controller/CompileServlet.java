@@ -2,6 +2,7 @@ package com.enrico.latexedit.controller;
 
 import com.enrico.latexedit.service.CompileResult;
 import com.enrico.latexedit.service.LatexCompileService;
+import com.enrico.latexedit.service.WorkspaceService;
 import com.enrico.latexedit.util.JsonResponses;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -35,6 +36,7 @@ public class CompileServlet extends HttpServlet {
 
     private static final Logger LOGGER = Logger.getLogger(CompileServlet.class.getName());
     private final LatexCompileService compileService = new LatexCompileService();
+    private final WorkspaceService workspaceService = new WorkspaceService();
 
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response)
@@ -77,7 +79,7 @@ public class CompileServlet extends HttpServlet {
             }
         }
 
-        respond(compileService.compile(main, files), response);
+        respond(compileService.compile(main, files), response, null);
     }
 
     private void handleJson(HttpServletRequest request, HttpServletResponse response) throws IOException {
@@ -89,11 +91,18 @@ public class CompileServlet extends HttpServlet {
 
         JsonObject root = JsonParser.parseString(body).getAsJsonObject();
         String main = root.has("main") ? root.get("main").getAsString() : "main.tex";
+
+        // Compila a partir do disco do servidor e grava o PDF no NAS
+        if (root.has("project") && !root.get("project").isJsonNull()) {
+            handleWorkspaceCompile(root, main, response);
+            return;
+        }
+
         Map<String, byte[]> files = new LinkedHashMap<>();
 
         if (!root.has("files") || !root.get("files").isJsonArray()) {
             JsonResponses.error(response, HttpServletResponse.SC_BAD_REQUEST,
-                    "Campo 'files' (array) é obrigatório.");
+                    "Campo 'files' (array) ou 'project' é obrigatório.");
             return;
         }
 
@@ -116,15 +125,51 @@ public class CompileServlet extends HttpServlet {
             files.put(path.replace('\\', '/'), bytes);
         }
 
-        respond(compileService.compile(main, files), response);
+        respond(compileService.compile(main, files), response, null);
     }
 
-    private void respond(CompileResult result, HttpServletResponse response) throws IOException {
+    private void handleWorkspaceCompile(JsonObject root, String main, HttpServletResponse response)
+            throws IOException {
+        String project = root.get("project").getAsString();
+        Map<String, byte[]> files = workspaceService.collectProjectFiles(project);
+
+        if (root.has("overrides") && root.get("overrides").isJsonObject()) {
+            JsonObject overrides = root.getAsJsonObject("overrides");
+            for (String key : overrides.keySet()) {
+                String content = overrides.get(key).getAsString();
+                files.put(key.replace('\\', '/'), content.getBytes(StandardCharsets.UTF_8));
+                // também persiste override no NAS antes de compilar
+                String absoluteRel = project.isBlank()
+                        ? key
+                        : WorkspaceService.normalizeRelative(project) + "/" + key.replace('\\', '/');
+                while (absoluteRel.contains("//")) {
+                    absoluteRel = absoluteRel.replace("//", "/");
+                }
+                workspaceService.writeText(absoluteRel, content);
+            }
+        }
+
+        CompileResult result = compileService.compile(main, files);
+        String pdfRelative = null;
+        if (result.isSuccess() && result.pdfBytes().isPresent()) {
+            String mainNorm = main.replace('\\', '/');
+            String pdfName = mainNorm.replaceAll("(?i)\\.tex$", ".pdf");
+            String projectNorm = WorkspaceService.normalizeRelative(project);
+            pdfRelative = projectNorm.isEmpty() ? pdfName : projectNorm + "/" + pdfName;
+            workspaceService.writeBytes(pdfRelative, result.pdfBytes().get());
+        }
+        respond(result, response, pdfRelative);
+    }
+
+    private void respond(CompileResult result, HttpServletResponse response, String pdfPath) throws IOException {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("success", result.isSuccess());
         body.put("message", result.getMessage());
         body.put("engine", result.getEngine());
         body.put("log", result.getLog());
+        if (pdfPath != null) {
+            body.put("pdfPath", pdfPath);
+        }
 
         if (result.isSuccess() && result.pdfBytes().isPresent()) {
             body.put("pdfBase64", Base64.getEncoder().encodeToString(result.pdfBytes().get()));

@@ -13,6 +13,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LATEX_ENGINE=pdflatex \
     LATEX_TIMEOUTSECONDS=120 \
     LATEX_PASSES=2 \
+    LATEX_WORKSPACEROOT=/data/workspace \
     TLS_SAN_EXTRA=IP:192.168.0.3
 
 RUN apt-get update \
@@ -29,7 +30,8 @@ RUN apt-get update \
         ghostscript \
         fonts-liberation \
     && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /usr/local/tomcat/webapps/*
+    && rm -rf /usr/local/tomcat/webapps/* \
+    && mkdir -p /data/workspace
 
 COPY --from=build /src/target/latexedit.war /usr/local/tomcat/webapps/ROOT.war
 COPY docker/server.xml /usr/local/tomcat/conf/server.xml

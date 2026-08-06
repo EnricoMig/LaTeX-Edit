@@ -22,6 +22,7 @@ public class HealthServlet extends HttpServlet {
         body.put("app", AppConfig.appName());
         body.put("version", AppConfig.appVersion());
         body.put("engine", AppConfig.latexEngine());
+        body.put("workspaceRoot", AppConfig.workspaceRoot());
         body.put("timestamp", Instant.now().toString());
         JsonResponses.write(response, HttpServletResponse.SC_OK, body);
     }

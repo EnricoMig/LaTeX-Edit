@@ -11,7 +11,7 @@ import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
 
-@WebFilter(urlPatterns = "/api/*")
+@WebFilter(urlPatterns = {"/api/*"})
 public class CorsFilter implements Filter {
 
     @Override
@@ -29,7 +29,7 @@ public class CorsFilter implements Filter {
             httpResponse.setHeader("Access-Control-Allow-Origin", "*");
         }
 
-        httpResponse.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        httpResponse.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
         httpResponse.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
         httpResponse.setHeader("Access-Control-Max-Age", "86400");
 

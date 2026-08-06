@@ -7,7 +7,8 @@ import {
 import { createExplorer } from "./explorer.js";
 import { applyTheme, getStoredTheme, syncThemeToggle, toggleTheme } from "./theme.js";
 import { WorkspaceFs, baseName, ensureTexExtension, parentPath } from "./workspace-fs.js";
-import { base64ToUint8Array, checkHealth, compileProject, getApiBase } from "./api.js";
+import { checkHealth, compileProject, getApiBase } from "./api.js";
+import { renderEmbeddedPdf } from "./pdf-viewer.js";
 
 const els = {
     editor: document.getElementById("editor"),
@@ -32,6 +33,8 @@ const els = {
     btnSave: document.getElementById("btn-save"),
     btnOpenFolder: document.getElementById("btn-open-folder"),
     btnExportPdf: document.getElementById("btn-export-pdf"),
+    btnDownloadPdf: document.getElementById("btn-download-pdf"),
+    btnDownloadPdfPane: document.getElementById("btn-download-pdf-pane"),
     btnToggleExplorer: document.getElementById("btn-toggle-explorer"),
     btnToggleLog: document.getElementById("btn-toggle-log"),
     btnCloseLog: document.getElementById("btn-close-log"),
@@ -39,6 +42,11 @@ const els = {
     layoutButtons: [...document.querySelectorAll(".layout-btn")],
     inputTex: document.getElementById("input-tex"),
     inputPdf: document.getElementById("input-pdf"),
+    folderModal: document.getElementById("folder-modal"),
+    folderModalPath: document.getElementById("folder-modal-path"),
+    folderModalList: document.getElementById("folder-modal-list"),
+    folderModalUp: document.getElementById("folder-modal-up"),
+    folderModalOpen: document.getElementById("folder-modal-open"),
 };
 
 const fs = new WorkspaceFs();
@@ -80,8 +88,8 @@ function syncDocNameInput(path) {
 
 function updateWorkspaceModeLabel() {
     els.workspaceMode.textContent = fs.isOpen()
-        ? `Pasta: ${fs.getName()}`
-        : "Nenhuma pasta aberta";
+        ? `NAS: ${fs.getName()}`
+        : "Nenhuma pasta no NAS";
 }
 
 function setEditorEnabled(enabled) {
@@ -134,23 +142,23 @@ function showViewerMessage(title, bodyHtml) {
 
 function showWelcomeViewer() {
     showViewerMessage(
-        "Abra a pasta do projeto",
+        "Abra a pasta do projeto no NAS",
         `
-          <p>Use a <strong>Navegação</strong> à esquerda para abrir a pasta raiz, editar o script e gerar o PDF final.</p>
-          <button type="button" class="btn btn-primary" id="welcome-open-folder">Abrir pasta</button>
+          <p>Os arquivos ficam no <strong>servidor</strong> (volume Docker), não no PC do navegador.</p>
+          <p>Abra uma pasta, edite o <code>.tex</code>, clique em <strong>Gerar PDF</strong> (grava no NAS) ou <strong>Baixar PDF</strong>.</p>
+          <button type="button" class="btn btn-primary" id="welcome-open-folder">Abrir pasta no NAS</button>
         `
     );
     els.preview.querySelector("#welcome-open-folder")?.addEventListener("click", () => {
         openProjectFolder();
     });
     setEditorEnabled(false);
-    els.editor.value = "% Abra uma pasta na navegação para começar.\n";
+    els.editor.value = "% Abra uma pasta do NAS para começar.\n";
     refreshEditorChrome();
 }
 
 async function renderPdfViewer(path) {
     try {
-        // Revoga URL antiga ao reabrir o mesmo path após recompilação
         fs.revokePdfUrl(path);
         const url = await fs.getPdfObjectUrl(path);
         viewerPdfPath = path;
@@ -159,9 +167,11 @@ async function renderPdfViewer(path) {
         els.preview.innerHTML = `
             <div class="pdf-stage">
               <div class="pdf-busy" id="pdf-busy" hidden>Atualizando PDF…</div>
-              <iframe class="pdf-frame" title="PDF ${baseName(path)}" src="${url}#toolbar=1&view=FitH"></iframe>
+              <div class="pdfjs-host" id="pdfjs-host"></div>
             </div>
         `;
+        const host = document.getElementById("pdfjs-host");
+        await renderEmbeddedPdf(host, url);
     } catch (error) {
         console.error("Erro ao abrir PDF:", error);
         showViewerMessage("PDF indisponível", `<p>${error.message || "Não foi possível abrir o PDF."}</p>`);
@@ -190,7 +200,7 @@ function showCompileHint(_texPath) {
         "PDF final",
         `
           <p>O painel mostra o PDF do documento principal (<code>${escapeHtml(main || "main.tex")}</code>).</p>
-          <p>A compilação roda sozinha ~2s após você parar de digitar, ou clique em <strong>Recompile</strong>.</p>
+          <p>A geração grava o PDF no NAS. Use <strong>Gerar PDF</strong> ou aguarde o auto-compile ~2s após digitar.</p>
         `
     );
 }
@@ -215,27 +225,69 @@ function touchAutosaveHint(message) {
         hour: "2-digit",
         minute: "2-digit",
     });
-    els.autosaveHint.textContent = fs.isOpen() ? `Disco · ${stamp}` : "Sem pasta";
+    els.autosaveHint.textContent = fs.isOpen() ? `NAS · ${stamp}` : "Sem pasta no NAS";
 }
 
 function ensureFolderOrWarn() {
     if (fs.isOpen()) {
         return true;
     }
-    window.alert("Abra uma pasta raiz na barra de navegação antes de continuar.");
+    window.alert("Abra uma pasta do NAS na barra de arquivos antes de continuar.");
     return false;
 }
 
+let folderBrowserPath = "";
+
+function closeFolderModal() {
+    if (els.folderModal) {
+        els.folderModal.hidden = true;
+    }
+}
+
+async function refreshFolderModal() {
+    els.folderModalPath.textContent = folderBrowserPath ? `/${folderBrowserPath}` : "/";
+    els.folderModalList.innerHTML = `<p class="modal-loading">Carregando…</p>`;
+    try {
+        const items = await fs.listServerDir(folderBrowserPath);
+        const dirs = items.filter((i) => i.type === "dir");
+        if (dirs.length === 0) {
+            els.folderModalList.innerHTML =
+                `<p class="modal-empty">Nenhuma subpasta aqui. Você pode abrir esta pasta mesmo assim.</p>`;
+            return;
+        }
+        els.folderModalList.innerHTML = dirs
+            .map(
+                (dir) => `
+            <button type="button" class="modal-row" data-path="${dir.path}">
+              <span class="modal-row-icon" aria-hidden="true">DIR</span>
+              <span>${dir.name}</span>
+            </button>`
+            )
+            .join("");
+    } catch (error) {
+        els.folderModalList.innerHTML = `<p class="modal-empty">${error.message || "Falha ao listar pastas."}</p>`;
+    }
+}
+
 async function openProjectFolder() {
-    if (!fs.supportsNativeFolder()) {
-        window.alert(fs.nativeFolderBlockReason());
+    try {
+        await checkHealth();
+    } catch (error) {
+        window.alert(`Backend indisponível em ${getApiBase()}\n\n${error.message || ""}`);
         return;
     }
+    folderBrowserPath = "";
+    els.folderModal.hidden = false;
+    await refreshFolderModal();
+}
+
+async function confirmOpenServerFolder() {
     try {
         if (isDirty && !window.confirm("Alterações não salvas serão descartadas. Continuar?")) {
             return;
         }
-        await fs.openNativeFolder();
+        await fs.openServerFolder(folderBrowserPath);
+        closeFolderModal();
         if (!explorerOpen) {
             explorerOpen = true;
             applyExplorerVisibility();
@@ -253,15 +305,12 @@ async function openProjectFolder() {
             showViewerMessage("Pasta vazia", "<p>Crie um arquivo .tex na navegação.</p>");
             markDirty(false);
         }
-        touchAutosaveHint(`Pasta aberta: ${fs.getName()}`);
+        touchAutosaveHint(`Pasta NAS: ${fs.getName()}`);
         setStatus("idle", "Pasta aberta");
         scheduleAutoCompile();
     } catch (error) {
-        if (error?.name === "AbortError") {
-            return;
-        }
-        console.error("Erro ao abrir pasta:", error);
-        window.alert(error.message || "Não foi possível abrir a pasta.");
+        console.error("Erro ao abrir pasta NAS:", error);
+        window.alert(error.message || "Não foi possível abrir a pasta no NAS.");
     }
 }
 
@@ -312,7 +361,7 @@ async function openFile(path, { force = false } = {}) {
             markDirty(false);
             showViewerMessage("Recurso", `<p>Arquivo binário: <code>${baseName(path)}</code></p>`);
         } else {
-            const content = fs.readFile(path);
+            const content = await fs.readFile(path);
             setEditorEnabled(true);
             els.editor.value = content;
             refreshEditorChrome();
@@ -352,13 +401,13 @@ async function saveDocument({ silent = false } = {}) {
         markDirty(false);
         touchAutosaveHint();
         if (!silent) {
-            setStatus("idle", "Salvo no disco");
+            setStatus("idle", "Salvo no NAS");
         }
         explorer.render();
     } catch (error) {
         console.error("Erro ao salvar:", error);
         setStatus("error", "Falha ao salvar");
-        window.alert(error.message || "Não foi possível salvar o arquivo na pasta.");
+        window.alert(error.message || "Não foi possível salvar o arquivo no NAS.");
     }
 }
 
@@ -429,14 +478,10 @@ async function compilePdf({ auto = false } = {}) {
         showViewerMessage(
             "Backend indisponível",
             `<p>Não foi possível conectar em <code>${getApiBase()}</code>.</p>
-             <p><strong>Use o app em</strong>
-             <a href="http://localhost:8081/" target="_blank" rel="noreferrer">http://localhost:8081/</a>
-             (a porta 8080/LaTEdit não tem a API de compilação).</p>`
+             <p>Verifique o container LaTeX Edit no NAS.</p>`
         );
         if (!auto) {
-            window.alert(
-                `Backend indisponível.\n\nAbra: http://localhost:8081/\n(Evite http://localhost:8080/LaTEdit/)`
-            );
+            window.alert(`Backend indisponível em ${getApiBase()}`);
         }
         return;
     }
@@ -449,10 +494,10 @@ async function compilePdf({ auto = false } = {}) {
         const payload = await fs.buildCompilePayload(mainPath, overrides);
         const result = await compileProject(payload);
 
-        if (!result.success || !result.pdfBase64) {
+        if (!result.success || (!result.pdfBase64 && !result.pdfPath)) {
             const logTail = (result.log || "").slice(-8000);
-            setStatus("error", "Erro ao compilar");
-            touchAutosaveHint("Compilação falhou");
+            setStatus("error", "Erro ao gerar PDF");
+            touchAutosaveHint("Geração falhou");
             setCompileLog(logTail || result.message || "Sem log");
             if (!auto) {
                 setLogOpen(true, { focus: true });
@@ -460,7 +505,7 @@ async function compilePdf({ auto = false } = {}) {
             setPdfBusy(false);
             if (!viewerPdfPath) {
                 showViewerMessage(
-                    "Falha na compilação",
+                    "Falha na geração",
                     `<p>${escapeHtml(result.message || "Veja o painel Logs.")}</p>
                      <p>Compilando: <code>${escapeHtml(mainPath)}</code></p>`
                 );
@@ -468,23 +513,23 @@ async function compilePdf({ auto = false } = {}) {
             return;
         }
 
-        const pdfBytes = base64ToUint8Array(result.pdfBase64);
-        const savedPath = await fs.saveCompiledPdf(mainPath, pdfBytes);
+        const savedPath = await fs.saveCompiledPdf(mainPath, null, result.pdfPath);
+        await fs.refreshTree();
         explorer.render();
-        setCompileLog(result.log || "Compilação concluída.");
+        setCompileLog(result.log || "PDF gerado no NAS.");
         if (!auto) {
             setLogOpen(false);
         }
         await renderPdfViewer(savedPath);
-        setStatus("idle", "PDF atualizado");
-        touchAutosaveHint(`PDF: ${baseName(savedPath)} · main ${mainPath}`);
+        setStatus("idle", "PDF no NAS");
+        touchAutosaveHint(`PDF no NAS: ${baseName(savedPath)} · main ${mainPath}`);
     } catch (error) {
-        console.error("Erro ao compilar PDF:", error);
+        console.error("Erro ao gerar PDF:", error);
         setStatus("error", "Falha na API");
         setPdfBusy(false);
         if (!auto) {
-            showViewerMessage("Erro", `<p>${escapeHtml(error.message || "Falha ao compilar.")}</p>`);
-            window.alert(error.message || "Não foi possível compilar o projeto.");
+            showViewerMessage("Erro", `<p>${escapeHtml(error.message || "Falha ao gerar PDF.")}</p>`);
+            window.alert(error.message || "Não foi possível gerar o PDF no NAS.");
         }
     } finally {
         compileInFlight = false;
@@ -494,6 +539,38 @@ async function compilePdf({ auto = false } = {}) {
             compileQueued = false;
             scheduleAutoCompile();
         }
+    }
+}
+
+async function downloadPdfFromServer() {
+    if (!ensureFolderOrWarn()) {
+        return;
+    }
+    const main = fs.resolveMainDocument(fs.getActivePath());
+    const pdfPath = (main && fs.findCompanionPdf(main)) || viewerPdfPath;
+    if (!pdfPath || !fs.isPdf(pdfPath)) {
+        window.alert("Gere o PDF primeiro (botão Gerar PDF) para baixar do NAS.");
+        return;
+    }
+    try {
+        const url = fs.pdfFileUrl(pdfPath);
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Download HTTP ${response.status}`);
+        }
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = objectUrl;
+        a.download = baseName(pdfPath) || "documento.pdf";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(objectUrl);
+        setStatus("idle", "PDF baixado");
+    } catch (error) {
+        console.error(error);
+        window.alert(error.message || "Falha ao baixar o PDF do servidor.");
     }
 }
 
@@ -660,7 +737,35 @@ function bindEvents() {
         syncThemeToggle(els.btnTheme);
     });
     els.btnOpenFolder.addEventListener("click", openProjectFolder);
-    els.btnExportPdf.addEventListener("click", compilePdf);
+    els.btnExportPdf.addEventListener("click", () => compilePdf({ auto: false }));
+    els.btnDownloadPdf?.addEventListener("click", downloadPdfFromServer);
+    els.btnDownloadPdfPane?.addEventListener("click", downloadPdfFromServer);
+
+    els.folderModal?.querySelectorAll("[data-close-modal]").forEach((el) => {
+        el.addEventListener("click", closeFolderModal);
+    });
+    els.folderModalUp?.addEventListener("click", async () => {
+        folderBrowserPath = parentPath(folderBrowserPath);
+        await refreshFolderModal();
+    });
+    els.folderModalOpen?.addEventListener("click", confirmOpenServerFolder);
+    els.folderModalList?.addEventListener("click", async (event) => {
+        const row = event.target.closest("[data-path]");
+        if (!row) {
+            return;
+        }
+        folderBrowserPath = row.dataset.path;
+        await refreshFolderModal();
+    });
+    els.folderModalList?.addEventListener("dblclick", async (event) => {
+        const row = event.target.closest("[data-path]");
+        if (!row) {
+            return;
+        }
+        folderBrowserPath = row.dataset.path;
+        await confirmOpenServerFolder();
+    });
+
     els.btnToggleExplorer.addEventListener("click", () => {
         explorerOpen = !explorerOpen;
         applyExplorerVisibility();
@@ -775,8 +880,7 @@ async function init() {
     );
 
     if (!fs.supportsNativeFolder()) {
-        els.btnOpenFolder.title = "Disponível no Chrome/Edge";
-        els.btnOpenFolder.disabled = true;
+        els.btnOpenFolder.title = "Abrir pasta no NAS";
     }
 
     updateWorkspaceModeLabel();
@@ -791,7 +895,7 @@ async function init() {
         if (active) {
             await openFile(active, { force: true });
         }
-        touchAutosaveHint(`Pasta restaurada: ${fs.getName()}`);
+        touchAutosaveHint(`Pasta NAS restaurada: ${fs.getName()}`);
     }
 }
 

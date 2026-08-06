@@ -6,6 +6,11 @@
 |----------|-----|
 | Dev local (Jetty) | http://localhost:8081/ |
 | Docker / NAS (use HTTPS) | https://192.168.0.3:8095/ |
+| Pasta dos projetos no NAS | `/home/migliorini/AppData/latexedit` |
+
+**Importante:** o editor abre pastas **no servidor** (volume Docker), não no PC. Coloque os `.tex` em `/home/migliorini/AppData/latexedit/...`.
+
+**PDF:** preview embutido (PDF.js). **Gerar PDF** grava no NAS; **Baixar PDF** baixa para o cliente.
 | CasaOS painel | http://192.168.0.3:90/ |
 
 **Importante:** “Abrir pasta” no Chrome só funciona em HTTPS (ou localhost). O container já sobe TLS sozinho — **sem Nginx**.

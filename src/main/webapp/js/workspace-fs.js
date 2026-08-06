@@ -1,190 +1,124 @@
-const WORKSPACE_KEY = "latexedit.workspace.v1";
-const HANDLE_DB = "latexedit.fs";
-const HANDLE_STORE = "handles";
-const HANDLE_KEY = "root";
+import { getApiBase } from "./api.js";
 
-const TEXT_EXT = /\.(tex|bib|sty|cls|txt|md)$/i;
+const PROJECT_KEY = "latexedit.serverProject";
 const PDF_EXT = /\.pdf$/i;
-const BINARY_EXT = /\.(pdf|png|jpg|jpeg|eps)$/i;
-const SUPPORTED_EXT = /\.(tex|bib|sty|cls|txt|md|pdf|png|jpg|jpeg|eps)$/i;
+const TEXT_EXT = /\.(tex|bib|sty|cls|txt|md)$/i;
+const BINARY_EXT = /\.(pdf|png|jpg|jpeg|eps|svg|gif)$/i;
 
-export const SAMPLE_MAIN = `\\documentclass{article}
-\\usepackage[utf8]{inputenc}
-\\usepackage{amsmath}
-
-\\title{Documento}
-\\author{}
-\\date{\\today}
-
-\\begin{document}
-\\maketitle
-
-\\section{Introdução}
-Comece a editar este arquivo.
-
-\\end{document}
-`;
-
-function normalizePath(path) {
-    return String(path || "")
-        .replaceAll("\\", "/")
-        .replace(/^\/+/, "")
-        .replace(/\/+$/, "");
+export function normalizePath(path) {
+    if (!path) {
+        return "";
+    }
+    return String(path).replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "");
 }
 
-function parentPath(path) {
+export function baseName(path) {
     const normalized = normalizePath(path);
     const idx = normalized.lastIndexOf("/");
-    return idx === -1 ? "" : normalized.slice(0, idx);
+    return idx >= 0 ? normalized.slice(idx + 1) : normalized;
 }
 
-function baseName(path) {
+export function parentPath(path) {
     const normalized = normalizePath(path);
     const idx = normalized.lastIndexOf("/");
-    return idx === -1 ? normalized : normalized.slice(idx + 1);
+    return idx >= 0 ? normalized.slice(0, idx) : "";
 }
 
-function joinPath(...parts) {
-    return parts
-        .map((part) => normalizePath(part))
-        .filter(Boolean)
-        .join("/");
-}
-
-function ensureTexExtension(name) {
+export function ensureTexExtension(name) {
     const trimmed = name.trim();
     if (!trimmed) {
-        return "untitled.tex";
+        return "novo.tex";
     }
-    if (/\.[a-z0-9]+$/i.test(trimmed)) {
-        return trimmed;
-    }
-    return `${trimmed}.tex`;
+    return /\.[a-z0-9]+$/i.test(trimmed) ? trimmed : `${trimmed}.tex`;
 }
 
-function fileKind(path) {
-    if (PDF_EXT.test(path)) {
+function kindOf(name) {
+    const lower = name.toLowerCase();
+    if (PDF_EXT.test(lower)) {
         return "pdf";
     }
-    if (/\.(png|jpg|jpeg|eps)$/i.test(path)) {
+    if (BINARY_EXT.test(lower)) {
         return "asset";
     }
-    if (/\.bib$/i.test(path)) {
+    if (lower.endsWith(".bib")) {
         return "bib";
     }
-    if (/\.(sty|cls)$/i.test(path)) {
+    if (lower.endsWith(".sty") || lower.endsWith(".cls")) {
         return "sty";
     }
-    return "tex";
+    return "text";
 }
 
-function openHandleDb() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(HANDLE_DB, 1);
-        request.onupgradeneeded = () => {
-            const db = request.result;
-            if (!db.objectStoreNames.contains(HANDLE_STORE)) {
-                db.createObjectStore(HANDLE_STORE);
-            }
-        };
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
+async function apiJson(method, path, body) {
+    const response = await fetch(`${getApiBase()}${path}`, {
+        method,
+        headers: {
+            Accept: "application/json",
+            ...(body !== undefined ? { "Content-Type": "application/json; charset=UTF-8" } : {}),
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
     });
-}
-
-async function saveRootHandle(handle) {
-    const db = await openHandleDb();
-    await new Promise((resolve, reject) => {
-        const tx = db.transaction(HANDLE_STORE, "readwrite");
-        tx.objectStore(HANDLE_STORE).put(handle, HANDLE_KEY);
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-    });
-    db.close();
-}
-
-async function loadRootHandle() {
-    const db = await openHandleDb();
-    const handle = await new Promise((resolve, reject) => {
-        const tx = db.transaction(HANDLE_STORE, "readonly");
-        const req = tx.objectStore(HANDLE_STORE).get(HANDLE_KEY);
-        req.onsuccess = () => resolve(req.result || null);
-        req.onerror = () => reject(req.error);
-    });
-    db.close();
-    return handle;
-}
-
-async function clearRootHandle() {
-    const db = await openHandleDb();
-    await new Promise((resolve, reject) => {
-        const tx = db.transaction(HANDLE_STORE, "readwrite");
-        tx.objectStore(HANDLE_STORE).delete(HANDLE_KEY);
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-    });
-    db.close();
-}
-
-function emptyWorkspace(name = "sem-pasta") {
-    return {
-        name,
-        activePath: "",
-        expanded: { "": true },
-        entries: {},
-    };
-}
-
-function arrayBufferToBase64(buffer) {
-    const bytes = new Uint8Array(buffer);
-    let binary = "";
-    const chunk = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunk) {
-        binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.success) {
+        throw new Error(data?.message || `Falha FS HTTP ${response.status}`);
     }
-    return btoa(binary);
+    return data;
 }
 
 export class WorkspaceFs {
     constructor() {
-        this.workspace = emptyWorkspace();
-        this.nativeRoot = null;
-        this.nativeHandles = new Map();
-        this.mode = "idle";
+        this.projectRoot = "";
+        this.workspace = {
+            name: "",
+            activePath: "",
+            entries: {},
+            expanded: new Set([""]),
+        };
+        this.contentCache = new Map();
         this.pdfUrls = new Map();
     }
 
-    isOpen() {
-        return this.mode === "native" && Boolean(this.nativeRoot);
+    load() {
+        try {
+            const saved = localStorage.getItem(PROJECT_KEY);
+            if (saved) {
+                this.projectRoot = normalizePath(saved);
+            }
+        } catch {
+            // ignore
+        }
+    }
+
+    persistProject() {
+        try {
+            if (this.projectRoot) {
+                localStorage.setItem(PROJECT_KEY, this.projectRoot);
+            } else {
+                localStorage.removeItem(PROJECT_KEY);
+            }
+        } catch {
+            // ignore
+        }
     }
 
     supportsNativeFolder() {
-        return typeof window.showDirectoryPicker === "function";
+        return true;
     }
 
-    /**
-     * Motivo legível quando showDirectoryPicker não está disponível.
-     * Em HTTP fora de localhost o Chrome desliga a API (contexto inseguro).
-     */
     nativeFolderBlockReason() {
-        if (this.supportsNativeFolder()) {
-            return null;
-        }
-        const isLocalhost =
-            window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-        const isSecure = window.isSecureContext === true || isLocalhost;
-        if (!isSecure) {
-            return (
-                "O navegador bloqueia abrir pastas do PC em HTTP da rede.\n\n" +
-                "Use a URL HTTPS do app (ex.: https://192.168.0.3:8095/).\n" +
-                "Na 1ª vez o Chrome avisa o certificado — avance em Avançado → Continuar."
-            );
-        }
-        return "Seu navegador não oferece abertura de pasta local. Use Chrome ou Edge atualizado.";
+        return null;
+    }
+
+    isOpen() {
+        return Boolean(this.projectRoot);
     }
 
     getName() {
-        return this.workspace.name;
+        return this.workspace.name || baseName(this.projectRoot) || this.projectRoot || "";
+    }
+
+    getProjectRoot() {
+        return this.projectRoot;
     }
 
     getActivePath() {
@@ -204,12 +138,16 @@ export class WorkspaceFs {
         return Boolean(this.workspace.entries[normalizePath(path)]);
     }
 
-    isDir(path) {
-        return this.workspace.entries[normalizePath(path)]?.type === "dir";
-    }
-
     isFile(path) {
         return this.workspace.entries[normalizePath(path)]?.type === "file";
+    }
+
+    isDir(path) {
+        const key = normalizePath(path);
+        if (!key) {
+            return this.isOpen();
+        }
+        return this.workspace.entries[key]?.type === "dir";
     }
 
     isPdf(path) {
@@ -221,617 +159,333 @@ export class WorkspaceFs {
         return entry?.type === "file" && entry.kind !== "pdf" && entry.kind !== "asset";
     }
 
-    readFile(path) {
-        const normalized = normalizePath(path);
-        const entry = this.workspace.entries[normalized];
-        if (!entry || entry.type !== "file") {
-            throw new Error(`Arquivo não encontrado: ${normalized}`);
-        }
-        if (entry.kind === "pdf") {
-            throw new Error("Arquivos PDF não são editáveis como texto.");
-        }
-        return entry.content ?? "";
-    }
-
-    writeFile(path, content) {
-        const normalized = normalizePath(path);
-        const entry = this.workspace.entries[normalized];
-        if (!entry || entry.type !== "file" || entry.kind === "pdf") {
-            throw new Error(`Arquivo de texto não encontrado: ${normalized}`);
-        }
-        entry.content = content;
-    }
-
-    ensureParentDirs(path) {
-        let current = parentPath(path);
-        while (current) {
-            if (!this.workspace.entries[current]) {
-                this.workspace.entries[current] = { type: "dir" };
-            } else if (this.workspace.entries[current].type !== "dir") {
-                throw new Error(`Caminho inválido: ${current} não é pasta`);
-            }
-            current = parentPath(current);
-        }
-    }
-
-    async getDirectoryHandleFor(path, { create = false } = {}) {
-        if (!this.nativeRoot) {
-            throw new Error("Nenhuma pasta raiz aberta.");
-        }
-        const normalized = normalizePath(path);
-        if (!normalized) {
-            return this.nativeRoot;
-        }
-        if (this.nativeHandles.has(normalized) && this.isDir(normalized)) {
-            return this.nativeHandles.get(normalized);
-        }
-        const parts = normalized.split("/");
-        let dir = this.nativeRoot;
-        let built = "";
-        for (const part of parts) {
-            built = joinPath(built, part);
-            dir = await dir.getDirectoryHandle(part, { create });
-            this.nativeHandles.set(built, dir);
-            if (!this.workspace.entries[built]) {
-                this.workspace.entries[built] = { type: "dir" };
-            }
-        }
-        return dir;
-    }
-
-    async writeNativeTextFile(path, content) {
-        if (!this.isOpen()) {
-            throw new Error("Abra uma pasta raiz antes de salvar.");
-        }
-        const normalized = normalizePath(path);
-        const parts = normalized.split("/");
-        const fileName = parts.pop();
-        const dir = await this.getDirectoryHandleFor(parts.join("/"), { create: true });
-        const handle = await dir.getFileHandle(fileName, { create: true });
-        const writable = await handle.createWritable();
-        await writable.write(content);
-        await writable.close();
-        this.nativeHandles.set(normalized, handle);
-        return true;
-    }
-
-    async writeNativeBinaryFile(path, data) {
-        if (!this.isOpen()) {
-            throw new Error("Abra uma pasta raiz antes de importar.");
-        }
-        const normalized = normalizePath(path);
-        const parts = normalized.split("/");
-        const fileName = parts.pop();
-        const dir = await this.getDirectoryHandleFor(parts.join("/"), { create: true });
-        const handle = await dir.getFileHandle(fileName, { create: true });
-        const writable = await handle.createWritable();
-        await writable.write(data);
-        await writable.close();
-        this.nativeHandles.set(normalized, handle);
-        this.revokePdfUrl(normalized);
-        return true;
-    }
-
-    async createFile(path, content = "") {
-        const normalized = normalizePath(path);
-        if (!normalized) {
-            throw new Error("Nome de arquivo inválido");
-        }
-        if (this.exists(normalized)) {
-            throw new Error("Já existe um item com esse nome");
-        }
-        this.ensureParentDirs(normalized);
-        const kind = fileKind(normalized);
-        this.workspace.entries[normalized] = {
-            type: "file",
-            kind,
-            content: kind === "pdf" ? null : content,
-        };
-        if (this.isOpen() && kind !== "pdf") {
-            await this.writeNativeTextFile(normalized, content);
-        }
-        return normalized;
-    }
-
-    async createFolder(path) {
-        const normalized = normalizePath(path);
-        if (!normalized) {
-            throw new Error("Nome de pasta inválido");
-        }
-        if (this.exists(normalized)) {
-            throw new Error("Já existe um item com esse nome");
-        }
-        this.ensureParentDirs(normalized);
-        this.workspace.entries[normalized] = { type: "dir" };
-        this.workspace.expanded[normalized] = true;
-        if (this.isOpen()) {
-            await this.getDirectoryHandleFor(normalized, { create: true });
-        }
-        return normalized;
-    }
-
-    async deletePath(path) {
-        const normalized = normalizePath(path);
-        if (!this.exists(normalized)) {
-            return;
-        }
-
-        if (this.isOpen()) {
-            const parent = parentPath(normalized);
-            const name = baseName(normalized);
-            const dir = await this.getDirectoryHandleFor(parent, { create: false });
-            await dir.removeEntry(name, { recursive: true });
-        }
-
-        const prefix = `${normalized}/`;
-        for (const key of Object.keys(this.workspace.entries)) {
-            if (key === normalized || key.startsWith(prefix)) {
-                this.revokePdfUrl(key);
-                delete this.workspace.entries[key];
-                delete this.workspace.expanded[key];
-                this.nativeHandles.delete(key);
-            }
-        }
-
-        if (
-            this.workspace.activePath === normalized ||
-            this.workspace.activePath.startsWith(prefix)
-        ) {
-            const fallback = Object.keys(this.workspace.entries).find(
-                (key) => this.workspace.entries[key].type === "file"
-            );
-            this.workspace.activePath = fallback || "";
-        }
-    }
-
-    async renamePath(oldPath, newName) {
-        const from = normalizePath(oldPath);
-        if (!this.exists(from)) {
-            throw new Error("Item não encontrado");
-        }
-
-        const cleanName = normalizePath(newName).split("/").pop();
-        if (!cleanName || cleanName.includes("..")) {
-            throw new Error("Nome inválido");
-        }
-
-        const entry = this.workspace.entries[from];
-        let nextName = cleanName;
-        if (entry.type === "file" && entry.kind !== "pdf") {
-            nextName = ensureTexExtension(cleanName);
-        }
-        const to = joinPath(parentPath(from), nextName);
-        if (from === to) {
-            return from;
-        }
-        if (this.exists(to)) {
-            throw new Error("Já existe um item com esse nome");
-        }
-
-        if (this.isOpen()) {
-            await this.#nativeMove(from, to, entry.type === "dir");
-        }
-
-        const moves = Object.keys(this.workspace.entries)
-            .filter((key) => key === from || key.startsWith(`${from}/`))
-            .sort((a, b) => b.length - a.length);
-
-        for (const key of moves) {
-            const suffix = key.slice(from.length);
-            const target = `${to}${suffix}`;
-            this.workspace.entries[target] = this.workspace.entries[key];
-            delete this.workspace.entries[key];
-            if (this.workspace.expanded[key]) {
-                this.workspace.expanded[target] = true;
-                delete this.workspace.expanded[key];
-            }
-            if (this.nativeHandles.has(key)) {
-                this.nativeHandles.set(target, this.nativeHandles.get(key));
-                this.nativeHandles.delete(key);
-            }
-            if (this.pdfUrls.has(key)) {
-                this.pdfUrls.set(target, this.pdfUrls.get(key));
-                this.pdfUrls.delete(key);
-            }
-        }
-
-        if (this.workspace.activePath === from || this.workspace.activePath.startsWith(`${from}/`)) {
-            this.workspace.activePath =
-                this.workspace.activePath === from
-                    ? to
-                    : `${to}${this.workspace.activePath.slice(from.length)}`;
-        }
-
-        return to;
-    }
-
-    async #nativeMove(from, to, isDirectory) {
-        const fromParent = await this.getDirectoryHandleFor(parentPath(from));
-        const toParent = await this.getDirectoryHandleFor(parentPath(to), { create: true });
-        const fromName = baseName(from);
-        const toName = baseName(to);
-
-        if (isDirectory) {
-            const sourceDir = await fromParent.getDirectoryHandle(fromName);
-            const targetDir = await toParent.getDirectoryHandle(toName, { create: true });
-            await this.#copyDirectory(sourceDir, targetDir);
-            await fromParent.removeEntry(fromName, { recursive: true });
-            return;
-        }
-
-        const sourceFile = await fromParent.getFileHandle(fromName);
-        const file = await sourceFile.getFile();
-        const targetFile = await toParent.getFileHandle(toName, { create: true });
-        const writable = await targetFile.createWritable();
-        await writable.write(await file.arrayBuffer());
-        await writable.close();
-        await fromParent.removeEntry(fromName);
-        this.nativeHandles.set(to, targetFile);
-        this.nativeHandles.delete(from);
-    }
-
-    async #copyDirectory(sourceDir, targetDir) {
-        for await (const [name, handle] of sourceDir.entries()) {
-            if (handle.kind === "directory") {
-                const next = await targetDir.getDirectoryHandle(name, { create: true });
-                await this.#copyDirectory(handle, next);
-            } else {
-                const file = await handle.getFile();
-                const out = await targetDir.getFileHandle(name, { create: true });
-                const writable = await out.createWritable();
-                await writable.write(await file.arrayBuffer());
-                await writable.close();
-            }
-        }
-    }
-
     isExpanded(path) {
-        return Boolean(this.workspace.expanded[normalizePath(path)]);
-    }
-
-    toggleExpanded(path) {
-        const normalized = normalizePath(path);
-        this.workspace.expanded[normalized] = !this.isExpanded(normalized);
-        return this.workspace.expanded[normalized];
+        return this.workspace.expanded.has(normalizePath(path));
     }
 
     setExpanded(path, value) {
-        this.workspace.expanded[normalizePath(path)] = Boolean(value);
+        const key = normalizePath(path);
+        if (value) {
+            this.workspace.expanded.add(key);
+        } else {
+            this.workspace.expanded.delete(key);
+        }
     }
 
-    listChildren(dirPath = "") {
-        const parent = normalizePath(dirPath);
-        return Object.keys(this.workspace.entries)
-            .filter((path) => {
-                if (parent) {
-                    if (!path.startsWith(`${parent}/`)) {
-                        return false;
-                    }
-                    const rest = path.slice(parent.length + 1);
-                    return !rest.includes("/");
-                }
-                return !path.includes("/");
-            })
-            .map((path) => ({
-                path,
-                name: baseName(path),
-                type: this.workspace.entries[path].type,
-                kind: this.workspace.entries[path].kind || "tex",
-            }))
-            .sort((a, b) => {
-                if (a.type !== b.type) {
-                    return a.type === "dir" ? -1 : 1;
-                }
-                return a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" });
-            });
+    toggleExpanded(path) {
+        const key = normalizePath(path);
+        if (this.workspace.expanded.has(key)) {
+            this.workspace.expanded.delete(key);
+        } else {
+            this.workspace.expanded.add(key);
+        }
+    }
+
+    fullPath(projectRelative) {
+        const rel = normalizePath(projectRelative);
+        if (!this.projectRoot) {
+            return rel;
+        }
+        return rel ? `${this.projectRoot}/${rel}` : this.projectRoot;
+    }
+
+    async listServerDir(relative = "") {
+        const data = await apiJson("GET", `/api/fs/list?path=${encodeURIComponent(normalizePath(relative))}`);
+        return data.items || [];
+    }
+
+    async openServerFolder(projectRelative) {
+        const root = normalizePath(projectRelative);
+        const data = await apiJson("GET", `/api/fs/tree?path=${encodeURIComponent(root)}`);
+        this.projectRoot = root;
+        this.workspace.name = baseName(root) || root || "workspace";
+        this.workspace.entries = {};
+        this.contentCache.clear();
+        this.revokeAllPdfUrls();
+
+        for (const item of data.items || []) {
+            const abs = normalizePath(item.path);
+            const rel = root && abs.startsWith(`${root}/`)
+                ? abs.slice(root.length + 1)
+                : abs === root
+                  ? ""
+                  : abs;
+            if (!rel) {
+                continue;
+            }
+            this.workspace.entries[rel] = {
+                type: item.type,
+                kind: item.kind || (item.type === "dir" ? "dir" : kindOf(item.name)),
+                content: null,
+            };
+        }
+
+        this.workspace.expanded = new Set([""]);
+        const preferred =
+            Object.keys(this.workspace.entries).find((p) => p.toLowerCase() === "main.tex") ||
+            Object.keys(this.workspace.entries).find((p) => TEXT_EXT.test(p)) ||
+            "";
+        this.workspace.activePath = preferred;
+        this.persistProject();
+        return this.workspace;
+    }
+
+    async tryRestoreFolder() {
+        if (!this.projectRoot) {
+            return false;
+        }
+        try {
+            await this.openServerFolder(this.projectRoot);
+            return true;
+        } catch (error) {
+            console.warn("Falha ao restaurar projeto do servidor:", error);
+            this.projectRoot = "";
+            this.persistProject();
+            return false;
+        }
+    }
+
+    async openNativeFolder() {
+        // Mantido por compatibilidade: o app abre o seletor de pastas do NAS.
+        throw new Error("Use o seletor de pastas do servidor.");
     }
 
     buildTreeRows() {
         const rows = [];
-        const walk = (dirPath, depth) => {
-            for (const child of this.listChildren(dirPath)) {
-                rows.push({ ...child, depth });
-                if (child.type === "dir" && this.isExpanded(child.path)) {
-                    walk(child.path, depth + 1);
+        const entries = Object.entries(this.workspace.entries)
+            .map(([path, meta]) => ({ path, ...meta, name: baseName(path) }))
+            .sort((a, b) => {
+                if (a.type !== b.type) {
+                    return a.type === "dir" ? -1 : 1;
                 }
+                return a.path.localeCompare(b.path, "pt-BR", { sensitivity: "base" });
+            });
+
+        const visible = (path) => {
+            let parent = parentPath(path);
+            while (parent) {
+                if (!this.isExpanded(parent)) {
+                    return false;
+                }
+                parent = parentPath(parent);
             }
+            return true;
         };
-        walk("", 0);
+
+        for (const entry of entries) {
+            if (!visible(entry.path)) {
+                continue;
+            }
+            const depth = entry.path.split("/").length - 1;
+            rows.push({
+                path: entry.path,
+                name: entry.name,
+                type: entry.type,
+                kind: entry.kind,
+                depth,
+            });
+        }
         return rows;
     }
 
-    relativeImportPath(fromFile, toFile) {
-        const fromDir = parentPath(fromFile);
-        const target = normalizePath(toFile).replace(/\.tex$/i, "");
-        if (!fromDir) {
-            return target;
+    async readFile(path) {
+        const key = normalizePath(path);
+        if (this.contentCache.has(key)) {
+            return this.contentCache.get(key);
         }
-        const fromParts = fromDir.split("/");
-        const toParts = target.split("/");
-        let i = 0;
-        while (i < fromParts.length && i < toParts.length && fromParts[i] === toParts[i]) {
-            i += 1;
-        }
-        const ups = fromParts.length - i;
-        const down = toParts.slice(i).join("/");
-        const prefix = ups > 0 ? `${"../".repeat(ups)}` : "";
-        return `${prefix}${down}`.replace(/\/$/, "") || ".";
+        const data = await apiJson("GET", `/api/fs/read?path=${encodeURIComponent(this.fullPath(key))}`);
+        this.contentCache.set(key, data.content ?? "");
+        return this.contentCache.get(key);
     }
 
-    revokePdfUrl(path) {
-        const url = this.pdfUrls.get(path);
-        if (url) {
-            URL.revokeObjectURL(url);
-            this.pdfUrls.delete(path);
+    writeFile(path, content) {
+        const key = normalizePath(path);
+        this.contentCache.set(key, content);
+        if (!this.workspace.entries[key]) {
+            this.workspace.entries[key] = { type: "file", kind: kindOf(key), content: null };
         }
     }
 
-    async getPdfObjectUrl(path) {
-        const normalized = normalizePath(path);
-        if (!this.isPdf(normalized)) {
-            throw new Error("Não é um PDF.");
-        }
-        if (this.pdfUrls.has(normalized)) {
-            return this.pdfUrls.get(normalized);
-        }
-        const handle = this.nativeHandles.get(normalized);
-        if (!handle) {
-            throw new Error("Handle do PDF indisponível.");
-        }
-        const file = await handle.getFile();
-        const url = URL.createObjectURL(file);
-        this.pdfUrls.set(normalized, url);
-        return url;
+    async writeNativeTextFile(path, content) {
+        const key = normalizePath(path);
+        await apiJson("PUT", "/api/fs/write", {
+            path: this.fullPath(key),
+            content: content ?? "",
+        });
+        this.contentCache.set(key, content ?? "");
     }
 
-    async downloadFile(path) {
-        const normalized = normalizePath(path);
-        const handle = this.nativeHandles.get(normalized);
-        if (!handle || handle.kind === "directory") {
-            throw new Error("Arquivo indisponível para download.");
+    async createFile(path, content = "") {
+        const key = normalizePath(path);
+        await apiJson("POST", "/api/fs/create", {
+            path: this.fullPath(key),
+            content,
+        });
+        this.workspace.entries[key] = { type: "file", kind: kindOf(key), content: null };
+        this.contentCache.set(key, content);
+        return key;
+    }
+
+    async createFolder(path) {
+        const key = normalizePath(path);
+        await apiJson("POST", "/api/fs/mkdir", { path: this.fullPath(key) });
+        this.workspace.entries[key] = { type: "dir", kind: "dir", content: null };
+        return key;
+    }
+
+    async deletePath(path) {
+        const key = normalizePath(path);
+        await apiJson("DELETE", `/api/fs/delete?path=${encodeURIComponent(this.fullPath(key))}`);
+        const prefix = `${key}/`;
+        for (const entryPath of Object.keys(this.workspace.entries)) {
+            if (entryPath === key || entryPath.startsWith(prefix)) {
+                delete this.workspace.entries[entryPath];
+                this.contentCache.delete(entryPath);
+                this.revokePdfUrl(entryPath);
+            }
         }
-        const file = await handle.getFile();
-        const url = URL.createObjectURL(file);
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = baseName(normalized);
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-        URL.revokeObjectURL(url);
+        if (this.workspace.activePath === key || this.workspace.activePath.startsWith(prefix)) {
+            this.workspace.activePath =
+                Object.keys(this.workspace.entries).find((p) => this.isTextFile(p)) || "";
+        }
+    }
+
+    async renamePath(path, nextName) {
+        const key = normalizePath(path);
+        const parent = parentPath(key);
+        const targetName = this.isTextFile(key) && !PDF_EXT.test(nextName)
+            ? ensureTexExtension(nextName)
+            : nextName.trim();
+        const dest = parent ? `${parent}/${targetName}` : targetName;
+        await apiJson("POST", "/api/fs/rename", {
+            from: this.fullPath(key),
+            to: this.fullPath(dest),
+        });
+
+        const prefix = `${key}/`;
+        const updates = {};
+        for (const [entryPath, meta] of Object.entries(this.workspace.entries)) {
+            if (entryPath === key) {
+                updates[dest] = { ...meta, kind: kindOf(dest) };
+            } else if (entryPath.startsWith(prefix)) {
+                const suffix = entryPath.slice(prefix.length);
+                updates[`${dest}/${suffix}`] = meta;
+            }
+        }
+        for (const entryPath of Object.keys(this.workspace.entries)) {
+            if (entryPath === key || entryPath.startsWith(prefix)) {
+                delete this.workspace.entries[entryPath];
+            }
+        }
+        Object.assign(this.workspace.entries, updates);
+
+        if (this.contentCache.has(key)) {
+            this.contentCache.set(dest, this.contentCache.get(key));
+            this.contentCache.delete(key);
+        }
+        if (this.workspace.activePath === key) {
+            this.workspace.activePath = dest;
+        } else if (this.workspace.activePath.startsWith(prefix)) {
+            this.workspace.activePath = dest + this.workspace.activePath.slice(key.length);
+        }
+        return dest;
+    }
+
+    resolveMainDocument(preferredPath) {
+        const preferred = normalizePath(preferredPath);
+        if (preferred && this.isTextFile(preferred)) {
+            const cached = this.contentCache.get(preferred);
+            if (cached && /\\documentclass\b/.test(cached)) {
+                return preferred;
+            }
+            if (preferred.toLowerCase() === "main.tex") {
+                return preferred;
+            }
+        }
+        const main = Object.keys(this.workspace.entries).find((p) => p.toLowerCase() === "main.tex");
+        if (main) {
+            return main;
+        }
+        return (
+            Object.keys(this.workspace.entries).find(
+                (p) => this.isTextFile(p) && this.contentCache.has(p) && /\\documentclass\b/.test(this.contentCache.get(p))
+            ) ||
+            Object.keys(this.workspace.entries).find((p) => this.isTextFile(p) && p.toLowerCase().endsWith(".tex")) ||
+            ""
+        );
     }
 
     findCompanionPdf(texPath) {
-        const normalized = normalizePath(texPath);
-        if (!normalized) {
-            return "";
-        }
-        const candidate = normalized.replace(/\.tex$/i, ".pdf");
-        return this.isPdf(candidate) ? candidate : "";
+        const candidate = normalizePath(texPath).replace(/\.tex$/i, ".pdf");
+        return this.exists(candidate) && this.isPdf(candidate) ? candidate : "";
     }
 
-    /**
-     * Documento raiz a compilar (estilo Overleaf):
-     * 1) main.tex  2) arquivo ativo com \\documentclass  3) qualquer .tex com \\documentclass
-     */
-    resolveMainDocument(preferredPath = "") {
-        const preferred = normalizePath(preferredPath);
-        if (this.isTextFile("main.tex")) {
-            return "main.tex";
-        }
+    relativeImportPath(fromFile, targetFile) {
+        return normalizePath(targetFile).replace(/\.tex$/i, "");
+    }
 
-        const hasDocumentClass = (path) => {
-            try {
-                return /\\documentclass\b/.test(this.readFile(path));
-            } catch {
-                return false;
-            }
+    async buildCompilePayload(mainPath, overrides = {}) {
+        return {
+            project: this.projectRoot,
+            main: normalizePath(mainPath),
+            overrides,
         };
-
-        if (preferred && this.isTextFile(preferred) && hasDocumentClass(preferred)) {
-            return preferred;
-        }
-
-        const active = this.getActivePath();
-        if (active && this.isTextFile(active) && hasDocumentClass(active)) {
-            return active;
-        }
-
-        const texFiles = Object.keys(this.workspace.entries)
-            .filter((path) => this.isTextFile(path))
-            .sort((a, b) => a.localeCompare(b, "pt-BR"));
-
-        for (const path of texFiles) {
-            if (hasDocumentClass(path)) {
-                return path;
-            }
-        }
-
-        return preferred && this.isTextFile(preferred) ? preferred : texFiles[0] || "";
     }
 
-    async buildCompilePayload(mainPath, editorOverrides = {}) {
-        if (!this.isOpen()) {
-            throw new Error("Abra uma pasta raiz antes de compilar.");
-        }
-        const main = normalizePath(mainPath);
-        if (!main || !this.isTextFile(main)) {
-            throw new Error("Selecione um arquivo .tex principal para compilar.");
-        }
-
-        const files = [];
-        for (const [path, entry] of Object.entries(this.workspace.entries)) {
-            if (entry.type !== "file") {
-                continue;
-            }
-            if (Object.prototype.hasOwnProperty.call(editorOverrides, path)) {
-                files.push({
-                    path,
-                    content: editorOverrides[path],
-                    encoding: "utf-8",
-                });
-                continue;
-            }
-            if (entry.kind === "pdf" || entry.kind === "asset") {
-                const handle = this.nativeHandles.get(path);
-                if (!handle) {
-                    continue;
-                }
-                const file = await handle.getFile();
-                const buffer = await file.arrayBuffer();
-                files.push({
-                    path,
-                    content: arrayBufferToBase64(buffer),
-                    encoding: "base64",
-                });
-                continue;
-            }
-            files.push({
-                path,
-                content: entry.content ?? "",
-                encoding: "utf-8",
-            });
-        }
-
-        if (!files.some((item) => item.path === main)) {
-            throw new Error("Arquivo principal ausente no projeto.");
-        }
-
-        return { main, files };
-    }
-
-    async saveCompiledPdf(texPath, pdfBytes) {
+    async saveCompiledPdf(texPath, _pdfBytes, serverPdfPath) {
         const target = normalizePath(texPath).replace(/\.tex$/i, ".pdf");
-        await this.writeNativeBinaryFile(target, pdfBytes);
         this.workspace.entries[target] = { type: "file", kind: "pdf", content: null };
         this.revokePdfUrl(target);
+        if (serverPdfPath) {
+            // caminho absoluto no workspace — ok se bater com fullPath
+        }
         return target;
     }
 
-    async mountRoot(root) {
-        const entries = {};
-        const handles = new Map();
+    pdfFileUrl(path) {
+        return `${getApiBase()}/api/fs/file?path=${encodeURIComponent(this.fullPath(path))}&t=${Date.now()}`;
+    }
 
-        const walk = async (dirHandle, prefix) => {
-            for await (const [name, handle] of dirHandle.entries()) {
-                const path = joinPath(prefix, name);
-                if (handle.kind === "directory") {
-                    entries[path] = { type: "dir" };
-                    handles.set(path, handle);
-                    await walk(handle, path);
-                } else if (SUPPORTED_EXT.test(name)) {
-                    if (BINARY_EXT.test(name)) {
-                        entries[path] = {
-                            type: "file",
-                            kind: fileKind(path),
-                            content: null,
-                        };
-                        handles.set(path, handle);
-                    } else if (TEXT_EXT.test(name)) {
-                        const file = await handle.getFile();
-                        const content = await file.text();
-                        entries[path] = { type: "file", kind: fileKind(path), content };
-                        handles.set(path, handle);
-                    }
-                }
-            }
-        };
+    async getPdfObjectUrl(path) {
+        const key = normalizePath(path);
+        const response = await fetch(this.pdfFileUrl(key), { headers: { Accept: "application/pdf" } });
+        if (!response.ok) {
+            throw new Error(`Não foi possível carregar o PDF (HTTP ${response.status}).`);
+        }
+        const blob = await response.blob();
+        this.revokePdfUrl(key);
+        const url = URL.createObjectURL(blob);
+        this.pdfUrls.set(key, url);
+        return url;
+    }
 
-        await walk(root, "");
+    revokePdfUrl(path) {
+        const key = normalizePath(path);
+        const url = this.pdfUrls.get(key);
+        if (url) {
+            URL.revokeObjectURL(url);
+            this.pdfUrls.delete(key);
+        }
+    }
 
+    revokeAllPdfUrls() {
         this.pdfUrls.forEach((url) => URL.revokeObjectURL(url));
         this.pdfUrls.clear();
-
-        this.nativeRoot = root;
-        this.nativeHandles = handles;
-        this.mode = "native";
-
-        const files = Object.keys(entries).filter((path) => entries[path].type === "file");
-        const preferred =
-            files.find((f) => /(^|\/)main\.tex$/i.test(f)) ||
-            files.find((f) => f.endsWith(".tex")) ||
-            files[0] ||
-            "";
-
-        this.workspace = {
-            name: root.name,
-            activePath: preferred,
-            expanded: { "": true },
-            entries,
-        };
-
-        for (const path of Object.keys(entries)) {
-            if (entries[path].type === "dir") {
-                this.workspace.expanded[path] = true;
-            }
-        }
-
-        await saveRootHandle(root);
-        return this.workspace;
     }
 
-    async openNativeFolder() {
-        if (!this.supportsNativeFolder()) {
-            throw new Error(this.nativeFolderBlockReason() || "Abertura de pasta indisponível.");
+    async refreshTree() {
+        if (!this.projectRoot) {
+            return;
         }
-        const root = await window.showDirectoryPicker({ mode: "readwrite" });
-        return this.mountRoot(root);
-    }
-
-    async tryRestoreFolder() {
-        if (!this.supportsNativeFolder()) {
-            return false;
+        const active = this.workspace.activePath;
+        await this.openServerFolder(this.projectRoot);
+        if (active && this.exists(active)) {
+            this.workspace.activePath = active;
         }
-        try {
-            const handle = await loadRootHandle();
-            if (!handle) {
-                return false;
-            }
-            const permission = await handle.queryPermission({ mode: "readwrite" });
-            let state = permission;
-            if (state !== "granted") {
-                state = await handle.requestPermission({ mode: "readwrite" });
-            }
-            if (state !== "granted") {
-                return false;
-            }
-            await this.mountRoot(handle);
-            return true;
-        } catch (error) {
-            console.error("Falha ao restaurar pasta:", error);
-            await clearRootHandle().catch(() => {});
-            return false;
-        }
-    }
-
-    closeFolder() {
-        this.pdfUrls.forEach((url) => URL.revokeObjectURL(url));
-        this.pdfUrls.clear();
-        this.nativeRoot = null;
-        this.nativeHandles = new Map();
-        this.mode = "idle";
-        this.workspace = emptyWorkspace();
-        clearRootHandle().catch(() => {});
-    }
-
-    /** @deprecated virtual mode removed from primary flow */
-    load() {
-        this.workspace = emptyWorkspace();
-        this.mode = "idle";
-        try {
-            localStorage.removeItem(WORKSPACE_KEY);
-        } catch {
-            // ignore
-        }
-        return this.workspace;
     }
 }
 
 export {
-    normalizePath,
-    parentPath,
-    baseName,
-    joinPath,
-    ensureTexExtension,
-    fileKind,
+    PDF_EXT,
+    TEXT_EXT,
 };

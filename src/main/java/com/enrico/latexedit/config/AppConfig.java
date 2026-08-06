@@ -71,4 +71,11 @@ public final class AppConfig {
     public static int latexPasses() {
         return Math.max(1, getInt("latex.passes", 2));
     }
+
+    /**
+     * Raiz dos projetos no servidor (NAS). Override: LATEX_WORKSPACEROOT.
+     */
+    public static String workspaceRoot() {
+        return get("latex.workspaceRoot", "./workspace");
+    }
 }
