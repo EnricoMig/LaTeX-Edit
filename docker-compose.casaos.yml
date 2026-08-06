@@ -19,5 +19,6 @@ services:
       TLS_SAN_EXTRA: "IP:192.168.0.3"
       TZ: America/Sao_Paulo
     volumes:
-      - /home/migliorini/AppData/latexedit:/data/workspace
+      # Biblioteca de projetos: /DATA/Documents/Biblioteca
+      - /DATA/Documents/Biblioteca:/data/workspace
     mem_limit: 2g
