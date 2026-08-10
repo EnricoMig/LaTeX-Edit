@@ -5,29 +5,29 @@
 | Ambiente | URL |
 |----------|-----|
 | Dev local (Jetty) | http://localhost:8081/ |
-| Docker / NAS (use HTTPS) | https://192.168.0.3:8095/ |
+| Docker / NAS (use HTTPS) | https://YOUR_NAS_HOST:8095/ |
 | Pasta dos projetos no NAS | `/DATA/Documents/Biblioteca` |
 
 **Importante:** o editor abre pastas **no servidor** (volume Docker), não no PC. Coloque os `.tex` em `/DATA/Documents/Biblioteca/...`.
 
 **PDF:** preview embutido (PDF.js). **Gerar PDF** grava no NAS; **Baixar PDF** baixa para o cliente.
-| CasaOS painel | http://192.168.0.3:90/ |
+| CasaOS painel | http://YOUR_NAS_HOST:90/ |
 
 **Importante:** “Abrir pasta” no Chrome só funciona em HTTPS (ou localhost). O container já sobe TLS sozinho — **sem Nginx**.
 
-Na 1ª visita o Chrome avisa o certificado autoassinado → **Avançado → Continuar para 192.168.0.3**.
+Na 1ª visita o Chrome avisa o certificado autoassinado → **Avançado → Continuar para YOUR_NAS_HOST**.
 
 Não use `http://localhost:8080/LaTEdit/` nem HTTP na porta 8095 para editar pastas.
 
 ## Pré-requisitos no NAS (CasaOS)
 
 1. Docker ativo (CasaOS já usa Docker).
-2. Acesso SSH ao NAS (`192.168.0.3`, porta 22) **ou** App Store → Custom Install.
+2. Acesso SSH ao NAS (`YOUR_NAS_HOST`, porta 22) **ou** App Store → Custom Install.
 3. Espaço em disco: a imagem com TeX Live fica **grande** (~2–4 GB no build).
 
 ## Opção A — Custom App no CasaOS (UI)
 
-1. Abra http://192.168.0.3:90/
+1. Abra http://YOUR_NAS_HOST:90/
 2. Apps → **+** → **Install a customized app** / Compose
 3. Cole o conteúdo de `docker-compose.casaos.yml` (ou `docker-compose.yml`)
 4. Se o CasaOS pedir imagem pronta em vez de build:
@@ -41,15 +41,15 @@ cd D:\Scripts\WEB\LaTexedit
 .\scripts\deploy-nas.ps1 -User migliorini
 ```
 
-Depois abra: **https://192.168.0.3:8095/**
+Depois abra: **https://YOUR_NAS_HOST:8095/**
 
 ## Health check
 
 ```bash
 # HTTP interno mapeado em 8096
-curl http://192.168.0.3:8096/api/health
+curl http://YOUR_NAS_HOST:8096/api/health
 # ou HTTPS (certificado autoassinado)
-curl -k https://192.168.0.3:8095/api/health
+curl -k https://YOUR_NAS_HOST:8095/api/health
 ```
 
 Resposta esperada: `"success":true`, `"engine":"pdflatex"`.

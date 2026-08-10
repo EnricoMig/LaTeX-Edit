@@ -4,7 +4,7 @@ set -euo pipefail
 KEYSTORE="${CATALINA_HOME}/conf/keystore.p12"
 STOREPASS="${TLS_STOREPASS:-changeit}"
 # IPs/DNS extras no certificado (LAN). Separe por vírgula.
-TLS_SAN_EXTRA="${TLS_SAN_EXTRA:-IP:192.168.0.3}"
+TLS_SAN_EXTRA="${TLS_SAN_EXTRA:-DNS:YOUR_NAS_HOST}"
 
 if [[ ! -f "${KEYSTORE}" ]]; then
   echo "[latexedit] Gerando certificado TLS autoassinado..."
