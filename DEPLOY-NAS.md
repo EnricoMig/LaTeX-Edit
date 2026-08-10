@@ -1,5 +1,7 @@
 # LaTeX Edit — deploy no CasaOS / Docker
 
+> Documentação aprofundada: [`docs/deploy.md`](docs/deploy.md) · índice geral: [`docs/README.md`](docs/README.md)
+
 ## Teste correto (resumo)
 
 | Ambiente | URL |
