@@ -8,6 +8,7 @@ import {
 import { createAutocomplete } from "./autocomplete.js";
 import { createExplorer } from "./explorer.js";
 import { applyTheme, getStoredTheme, syncThemeToggle, toggleTheme } from "./theme.js";
+import { applyEditorWordWrap, createSettingsPage, loadSettings } from "./settings.js";
 import { WorkspaceFs, baseName, ensureTexExtension, parentPath } from "./workspace-fs.js";
 import { checkHealth, compileProject, getApiBase } from "./api.js";
 import { PdfViewer } from "./pdf-viewer.js";
@@ -41,6 +42,9 @@ const els = {
     btnToggleLog: document.getElementById("btn-toggle-log"),
     btnCloseLog: document.getElementById("btn-close-log"),
     btnTheme: document.getElementById("btn-theme"),
+    btnSettings: document.getElementById("btn-settings"),
+    settingsModal: document.getElementById("settings-modal"),
+    settingWordWrap: document.getElementById("setting-word-wrap"),
     layoutButtons: [...document.querySelectorAll(".layout-btn")],
     btnLayoutMenu: document.getElementById("btn-layout-menu"),
     layoutMenu: document.getElementById("layout-menu"),
@@ -789,6 +793,17 @@ function insertImport(targetPath, kind) {
         return;
     }
     const relative = fs.relativeImportPath(fs.getActivePath(), targetPath);
+    if (/[^\x00-\x7F]/.test(relative)) {
+        const ok = window.confirm(
+            `O caminho "${relative}" tem acentos ou ç.\n` +
+                "O pdfLaTeX costuma falhar com isso em \\input/\\include.\n\n" +
+                "Recomendação: renomeie para ASCII (ex.: Explicacao.tex).\n\n" +
+                "Inserir mesmo assim?"
+        );
+        if (!ok) {
+            return;
+        }
+    }
     const command = kind === "include" ? "\\include" : "\\input";
     insertAtCursor(els.editor, `${command}{${relative}}`);
     markDirty(true);
@@ -865,6 +880,20 @@ const autocomplete = createAutocomplete({
     editor: els.editor,
     getProjectTexPaths: () =>
         Object.keys(fs.workspace?.entries || {}).filter((path) => /\.tex$/i.test(path)),
+});
+
+function applySettingsToUi(settings) {
+    applyEditorWordWrap(els.editor, settings.wordWrap);
+}
+
+const settingsPage = createSettingsPage({
+    modalEl: els.settingsModal,
+    openBtn: els.btnSettings,
+    wordWrapInput: els.settingWordWrap,
+    onChange: (settings) => {
+        applySettingsToUi(settings);
+        refreshEditorChrome();
+    },
 });
 
 function bindEvents() {
@@ -1048,6 +1077,7 @@ function bindEvents() {
 async function init() {
     applyTheme(getStoredTheme());
     syncThemeToggle(els.btnTheme);
+    applySettingsToUi(loadSettings());
     applyExplorerVisibility();
     applyLayoutMode();
     setLogOpen(false);

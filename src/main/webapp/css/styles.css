@@ -1219,6 +1219,58 @@ html[data-theme="dark"] .theme-icon-sun {
     word-break: break-all;
 }
 
+.settings-card {
+    width: min(440px, calc(100vw - 2rem));
+}
+
+.settings-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    margin: 0.25rem 0 0.5rem;
+}
+
+.settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--paper) 70%, var(--paper-raised));
+    cursor: pointer;
+}
+
+.settings-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.settings-copy strong {
+    font-size: 0.9rem;
+    color: var(--ink);
+}
+
+.settings-copy span {
+    font-size: 0.78rem;
+    color: var(--ink-muted);
+    line-height: 1.35;
+}
+
+.settings-row input[type="checkbox"] {
+    width: 1.1rem;
+    height: 1.1rem;
+    accent-color: var(--accent);
+    flex: 0 0 auto;
+}
+
+.settings-toolbar {
+    justify-content: flex-end;
+}
+
 .pdf-frame {
     flex: 1;
     width: 100%;
@@ -1388,6 +1440,13 @@ html[data-theme="dark"] .theme-icon-sun {
     line-height: 1.55;
     tab-size: 2;
     overflow: auto;
+    white-space: pre;
+}
+
+.editor.is-word-wrap {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .editor::selection {
