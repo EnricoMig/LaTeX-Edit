@@ -1,13 +1,13 @@
 # Deploy LaTeX Edit no NAS via SSH + Docker Compose
 # Uso:
-#   .\scripts\deploy-nas.ps1 -User casaos -HostIp 192.168.0.7
+#   .\scripts\deploy-nas.ps1 -User casaos -HostIp YOUR_NAS_HOST
 #   (vai pedir senha no scp/ssh)
 
 param(
     [Parameter(Mandatory = $true)]
     [string]$User,
 
-    [string]$HostIp = "192.168.0.7",
+    [string]$HostIp = "YOUR_NAS_HOST",
 
     [string]$RemoteDir = "~/latexedit",
 

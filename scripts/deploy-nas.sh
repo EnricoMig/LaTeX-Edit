@@ -4,7 +4,7 @@
 set -euo pipefail
 
 USER_NAME="${1:-migliorini}"
-HOST_IP="${2:-192.168.0.7}"
+HOST_IP="${2:-YOUR_NAS_HOST}"
 REMOTE_DIR="${3:-~/latexedit}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

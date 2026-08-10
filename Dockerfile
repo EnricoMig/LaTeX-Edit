@@ -16,7 +16,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LATEX_TIMEOUTSECONDS=120 \
     LATEX_PASSES=2 \
     LATEX_WORKSPACEROOT=/data/workspace \
-    TLS_SAN_EXTRA=IP:192.168.0.7
+    TLS_SAN_EXTRA=DNS:YOUR_NAS_HOST
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
