@@ -9,8 +9,11 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -18,6 +21,8 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public class LatexCompileService {
@@ -26,6 +31,9 @@ public class LatexCompileService {
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of(
             ".tex", ".bib", ".sty", ".cls", ".txt", ".md",
             ".png", ".jpg", ".jpeg", ".pdf", ".eps", ".svg"
+    );
+    private static final Pattern INPUT_PATTERN = Pattern.compile(
+            "\\\\(input|include)\\s*\\{([^}]+)\\}"
     );
 
     public CompileResult compile(String mainRelativePath, Map<String, byte[]> files) {
@@ -37,18 +45,42 @@ public class LatexCompileService {
             return CompileResult.fail("Limite de arquivos excedido.", "", engine);
         }
 
+        Map<String, byte[]> normalizedFiles = normalizeFileMap(files);
         String mainPath = normalizeRelativePath(mainRelativePath);
         if (mainPath == null || !mainPath.toLowerCase(Locale.ROOT).endsWith(".tex")) {
             return CompileResult.fail("Arquivo principal .tex inválido.", "", engine);
         }
-        if (!files.containsKey(mainPath)) {
-            return CompileResult.fail("Arquivo principal não encontrado no envio: " + mainPath, "", engine);
+        if (!normalizedFiles.containsKey(mainPath)) {
+            return CompileResult.fail(
+                    "Arquivo principal não encontrado no envio: " + mainPath
+                            + "\nArquivos: " + String.join(", ", normalizedFiles.keySet()),
+                    "",
+                    engine
+            );
+        }
+
+        List<String> missingInputs = findMissingInputs(normalizedFiles, mainPath);
+        if (!missingInputs.isEmpty()) {
+            StringBuilder hint = new StringBuilder();
+            hint.append("Arquivo(s) referenciados por \\input/\\include não encontrados no projeto:\n");
+            for (String missing : missingInputs) {
+                hint.append("  - ").append(missing).append('\n');
+                if (!isAsciiPath(missing)) {
+                    hint.append("    (nome com acento/ç: pdflatex costuma falhar — renomeie para ASCII, ")
+                            .append("ex.: Explicacao.tex)\n");
+                }
+            }
+            hint.append("Arquivos disponíveis:\n");
+            for (String path : normalizedFiles.keySet()) {
+                hint.append("  - ").append(path).append('\n');
+            }
+            return CompileResult.fail(hint.toString().trim(), hint.toString(), engine);
         }
 
         Path workDir = null;
         try {
             workDir = Files.createTempDirectory("latexedit-");
-            writeProjectFiles(workDir, files);
+            writeProjectFiles(workDir, normalizedFiles);
 
             if (!isEngineAvailable(engine)) {
                 return CompileResult.fail(
@@ -59,6 +91,12 @@ public class LatexCompileService {
             }
 
             StringBuilder log = new StringBuilder();
+            log.append("Arquivos enviados à compilação (").append(normalizedFiles.size()).append("):\n");
+            for (String path : normalizedFiles.keySet()) {
+                log.append("  - ").append(path).append('\n');
+            }
+            log.append('\n');
+
             int passes = AppConfig.latexPasses();
             int lastExit = -1;
 
@@ -191,6 +229,10 @@ public class LatexCompileService {
 
     private void enrichProcessEnvironment(ProcessBuilder builder) {
         Map<String, String> env = builder.environment();
+        // Necessário para \\input com pastas/arquivos UTF-8 (ex.: acentos)
+        env.put("LANG", "C.UTF-8");
+        env.put("LC_ALL", "C.UTF-8");
+        env.put("LANGUAGE", "C.UTF-8");
         // Instalação automática de pacotes sem diálogo GUI (quando possível)
         env.put("MIKTEX_AUTO_INSTALL", "1");
         env.put("MIKTEX_ENABLEINSTALLER", "1");
@@ -296,7 +338,7 @@ public class LatexCompileService {
         if (raw == null || raw.isBlank()) {
             return null;
         }
-        String normalized = raw.replace('\\', '/').trim();
+        String normalized = Normalizer.normalize(raw.replace('\\', '/').trim(), Normalizer.Form.NFC);
         while (normalized.startsWith("./")) {
             normalized = normalized.substring(2);
         }
@@ -307,6 +349,92 @@ public class LatexCompileService {
             return null;
         }
         return normalized;
+    }
+
+    private static Map<String, byte[]> normalizeFileMap(Map<String, byte[]> files) {
+        Map<String, byte[]> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, byte[]> entry : files.entrySet()) {
+            String path = normalizeRelativePath(entry.getKey());
+            if (path == null) {
+                continue;
+            }
+            normalized.put(path, entry.getValue());
+        }
+        return normalized;
+    }
+
+    private static boolean isAsciiPath(String path) {
+        for (int i = 0; i < path.length(); i++) {
+            if (path.charAt(i) > 127) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static List<String> findMissingInputs(Map<String, byte[]> files, String mainPath) {
+        Set<String> available = new LinkedHashSet<>(files.keySet());
+        Set<String> visited = new LinkedHashSet<>();
+        List<String> queue = new ArrayList<>();
+        List<String> missing = new ArrayList<>();
+        queue.add(mainPath);
+
+        while (!queue.isEmpty()) {
+            String current = queue.remove(0);
+            if (!visited.add(current)) {
+                continue;
+            }
+            byte[] bytes = files.get(current);
+            if (bytes == null) {
+                continue;
+            }
+            String source = new String(bytes, StandardCharsets.UTF_8);
+            Matcher matcher = INPUT_PATTERN.matcher(source);
+            while (matcher.find()) {
+                String rawTarget = matcher.group(2).trim();
+                String resolved = resolveInputCandidate(rawTarget, available);
+                if (resolved == null) {
+                    String display = normalizeRelativePath(rawTarget.replaceAll("(?i)\\.tex$", "") + ".tex");
+                    if (display == null) {
+                        display = rawTarget;
+                    }
+                    if (!missing.contains(display) && !missing.contains(rawTarget)) {
+                        missing.add(rawTarget);
+                    }
+                    continue;
+                }
+                if (resolved.toLowerCase(Locale.ROOT).endsWith(".tex")) {
+                    queue.add(resolved);
+                }
+            }
+        }
+        return missing;
+    }
+
+    private static String resolveInputCandidate(String rawTarget, Set<String> available) {
+        String normalized = normalizeRelativePath(rawTarget);
+        if (normalized == null) {
+            return null;
+        }
+        if (available.contains(normalized)) {
+            return normalized;
+        }
+        if (!normalized.toLowerCase(Locale.ROOT).endsWith(".tex")) {
+            String withTex = normalized + ".tex";
+            if (available.contains(withTex)) {
+                return withTex;
+            }
+        }
+        // Comparação case-insensitive (útil em volumes vindos de Windows)
+        for (String path : available) {
+            if (path.equalsIgnoreCase(normalized)
+                    || path.equalsIgnoreCase(normalized + ".tex")
+                    || (normalized.toLowerCase(Locale.ROOT).endsWith(".tex")
+                    && path.equalsIgnoreCase(normalized.substring(0, normalized.length() - 4)))) {
+                return path;
+            }
+        }
+        return null;
     }
 
     private boolean hasAllowedExtension(String path) {

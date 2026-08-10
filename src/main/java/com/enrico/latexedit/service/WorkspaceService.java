@@ -304,6 +304,7 @@ public class WorkspaceService {
                     continue;
                 }
                 String rel = project.relativize(path).toString().replace('\\', '/');
+                rel = java.text.Normalizer.normalize(rel, java.text.Normalizer.Form.NFC);
                 // Ignora PDF gerado a partir de um .tex irmão (ex.: main.pdf ao lado de main.tex)
                 if (".pdf".equals(ext)) {
                     String stem = name.substring(0, name.lastIndexOf('.'));

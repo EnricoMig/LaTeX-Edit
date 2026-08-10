@@ -9,12 +9,14 @@ RUN mvn -B -DskipTests package
 FROM tomcat:10.1-jdk21-temurin-jammy
 
 ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
     CATALINA_OPTS="-Xms256m -Xmx1024m" \
     LATEX_ENGINE=pdflatex \
     LATEX_TIMEOUTSECONDS=120 \
     LATEX_PASSES=2 \
     LATEX_WORKSPACEROOT=/data/workspace \
-    TLS_SAN_EXTRA=IP:192.168.0.3
+    TLS_SAN_EXTRA=IP:192.168.0.7
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
