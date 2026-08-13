@@ -3,11 +3,14 @@ package com.enrico.latexedit.service;
 import com.enrico.latexedit.config.AppConfig;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -273,6 +276,39 @@ public class WorkspaceService {
                 throw new IOException("Não foi possível renomear '" + from + "' para '" + to + "'.", error);
             }
             throw error;
+        }
+    }
+
+    /**
+     * Empacota todos os arquivos visíveis do projeto em um ZIP (sem pastas/arquivos ocultos).
+     */
+    public void zipProject(String projectRelative, OutputStream output) throws IOException {
+        Path project = resolveSafe(projectRelative);
+        if (!Files.exists(project)) {
+            throw new IOException("Projeto não encontrado: " + projectRelative);
+        }
+        if (!Files.isDirectory(project)) {
+            throw new IOException("Não é uma pasta de projeto: " + projectRelative);
+        }
+        try (ZipOutputStream zip = new ZipOutputStream(output, StandardCharsets.UTF_8);
+             Stream<Path> walk = Files.walk(project)) {
+            List<Path> paths = walk
+                    .filter(Files::isRegularFile)
+                    .filter(p -> !p.getFileName().toString().startsWith("."))
+                    .sorted()
+                    .toList();
+            for (Path path : paths) {
+                String rel = project.relativize(path).toString().replace('\\', '/');
+                if (rel.isBlank() || rel.contains("..")) {
+                    continue;
+                }
+                ZipEntry entry = new ZipEntry(rel);
+                entry.setTime(Files.getLastModifiedTime(path).toMillis());
+                zip.putNextEntry(entry);
+                Files.copy(path, zip);
+                zip.closeEntry();
+            }
+            zip.finish();
         }
     }
 

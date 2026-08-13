@@ -68,15 +68,36 @@
                 >
                     <span class="sr-only" id="status-sync-label">Pronto</span>
                 </span>
-                <button
-                    type="button"
-                    class="icon-btn"
-                    id="btn-download-pdf"
-                    title="Baixar PDF do servidor"
-                    aria-label="Baixar PDF do servidor"
-                >
-                    <i class="fa-solid fa-download" aria-hidden="true"></i>
-                </button>
+                <div class="download-menu-wrap" id="download-menu-wrap">
+                    <button
+                        type="button"
+                        class="icon-btn"
+                        id="btn-download-pdf"
+                        title="Baixar"
+                        aria-label="Baixar projeto"
+                        aria-haspopup="menu"
+                        aria-expanded="false"
+                        aria-controls="download-menu"
+                    >
+                        <i class="fa-solid fa-download" aria-hidden="true"></i>
+                    </button>
+                    <div class="download-menu" id="download-menu" role="menu" aria-label="Opções de download" hidden>
+                        <button type="button" class="download-menu-item" role="menuitem" data-download="zip">
+                            <i class="fa-solid fa-file-zipper" aria-hidden="true"></i>
+                            <span>
+                                <strong>Zip</strong>
+                                <small>Todos os arquivos do projeto</small>
+                            </span>
+                        </button>
+                        <button type="button" class="download-menu-item" role="menuitem" data-download="pdf">
+                            <i class="fa-solid fa-file-pdf" aria-hidden="true"></i>
+                            <span>
+                                <strong>PDF</strong>
+                                <small>Projeto compilado</small>
+                            </span>
+                        </button>
+                    </div>
+                </div>
                 <button
                     type="button"
                     class="theme-toggle"

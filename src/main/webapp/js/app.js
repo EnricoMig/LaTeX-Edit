@@ -38,6 +38,8 @@ const els = {
     btnSave: document.getElementById("btn-save"),
     btnOpenFolder: document.getElementById("btn-open-folder"),
     btnDownloadPdf: document.getElementById("btn-download-pdf"),
+    downloadMenu: document.getElementById("download-menu"),
+    downloadMenuWrap: document.getElementById("download-menu-wrap"),
     btnToggleExplorer: document.getElementById("btn-toggle-explorer"),
     btnToggleLog: document.getElementById("btn-toggle-log"),
     btnCloseLog: document.getElementById("btn-close-log"),
@@ -722,6 +724,26 @@ async function compilePdf({ auto = false } = {}) {
     }
 }
 
+async function triggerBlobDownload(blob, fileName) {
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objectUrl);
+}
+
+function setDownloadMenuOpen(open) {
+    if (!els.downloadMenu || !els.btnDownloadPdf) {
+        return;
+    }
+    els.downloadMenu.hidden = !open;
+    els.btnDownloadPdf.setAttribute("aria-expanded", String(open));
+    els.btnDownloadPdf.classList.toggle("is-open", open);
+}
+
 async function downloadPdfFromServer() {
     if (!ensureFolderOrWarn()) {
         return;
@@ -739,18 +761,35 @@ async function downloadPdfFromServer() {
             throw new Error(`Download HTTP ${response.status}`);
         }
         const blob = await response.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = objectUrl;
-        a.download = baseName(pdfPath) || "documento.pdf";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(objectUrl);
+        await triggerBlobDownload(blob, baseName(pdfPath) || "documento.pdf");
         setStatus("idle", "PDF baixado");
     } catch (error) {
         console.error(error);
         window.alert(error.message || "Falha ao baixar o PDF do servidor.");
+    }
+}
+
+async function downloadProjectZip() {
+    if (!ensureFolderOrWarn()) {
+        return;
+    }
+    try {
+        if (isDirty) {
+            await saveDocument({ silent: true });
+        }
+        const project = fs.getProjectRoot();
+        const url = `${getApiBase()}/api/fs/zip?path=${encodeURIComponent(project)}&t=${Date.now()}`;
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Download HTTP ${response.status}`);
+        }
+        const blob = await response.blob();
+        const zipName = `${fs.getName() || "projeto"}.zip`;
+        await triggerBlobDownload(blob, zipName);
+        setStatus("idle", "ZIP baixado");
+    } catch (error) {
+        console.error(error);
+        window.alert(error.message || "Falha ao baixar o ZIP do projeto.");
     }
 }
 
@@ -955,7 +994,40 @@ function bindEvents() {
         syncThemeToggle(els.btnTheme);
     });
     els.btnOpenFolder.addEventListener("click", openProjectFolder);
-    els.btnDownloadPdf?.addEventListener("click", downloadPdfFromServer);
+    els.btnDownloadPdf?.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const open = els.downloadMenu?.hidden !== false;
+        setDownloadMenuOpen(open);
+    });
+    els.downloadMenu?.addEventListener("click", async (event) => {
+        const item = event.target.closest("[data-download]");
+        if (!item) {
+            return;
+        }
+        event.preventDefault();
+        setDownloadMenuOpen(false);
+        if (item.dataset.download === "zip") {
+            await downloadProjectZip();
+            return;
+        }
+        if (item.dataset.download === "pdf") {
+            await downloadPdfFromServer();
+        }
+    });
+    document.addEventListener("pointerdown", (event) => {
+        if (!els.downloadMenu || els.downloadMenu.hidden) {
+            return;
+        }
+        if (els.downloadMenuWrap?.contains(event.target)) {
+            return;
+        }
+        setDownloadMenuOpen(false);
+    });
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && els.downloadMenu && !els.downloadMenu.hidden) {
+            setDownloadMenuOpen(false);
+        }
+    });
     els.btnPdfZoomIn?.addEventListener("click", async () => {
         if (!pdfViewer.pdf) {
             return;

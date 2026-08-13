@@ -34,6 +34,7 @@ public class FsServlet extends HttpServlet {
                 case "tree" -> writeTree(request, response);
                 case "read" -> writeRead(request, response);
                 case "file" -> writeFileDownload(request, response);
+                case "zip" -> writeProjectZip(request, response);
                 default -> JsonResponses.error(response, HttpServletResponse.SC_NOT_FOUND, "Ação FS desconhecida: " + action);
             }
         } catch (SecurityException error) {
@@ -195,6 +196,31 @@ public class FsServlet extends HttpServlet {
         );
         response.setContentLength(bytes.length);
         response.getOutputStream().write(bytes);
+    }
+
+    private void writeProjectZip(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String path = request.getParameter("path");
+        if (path == null || path.isBlank()) {
+            JsonResponses.error(response, HttpServletResponse.SC_BAD_REQUEST, "Parâmetro path obrigatório");
+            return;
+        }
+        String relative = WorkspaceService.normalizeRelative(path);
+        String folderName = relative;
+        int slash = relative.lastIndexOf('/');
+        if (slash >= 0) {
+            folderName = relative.substring(slash + 1);
+        }
+        if (folderName.isBlank()) {
+            folderName = "projeto";
+        }
+        String zipName = folderName + ".zip";
+        response.setStatus(HttpServletResponse.SC_OK);
+        response.setContentType("application/zip");
+        response.setHeader(
+                "Content-Disposition",
+                "attachment; filename*=UTF-8''" + URLEncoder.encode(zipName, StandardCharsets.UTF_8).replace("+", "%20")
+        );
+        workspace.zipProject(relative, response.getOutputStream());
     }
 
     private static void okPath(HttpServletResponse response, String path) throws IOException {
