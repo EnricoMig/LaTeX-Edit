@@ -545,28 +545,24 @@ html[data-theme="dark"] .theme-icon-sun {
     display: block;
 }
 
-.status-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.2rem 0.55rem;
-    border-radius: 999px;
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    background: var(--accent-soft);
-    color: var(--accent);
-    white-space: nowrap;
+.status-dot {
+    display: inline-block;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-soft);
 }
 
-.status-pill[data-state="dirty"] {
-    background: var(--warn-soft);
-    color: var(--warn);
+.status-dot[data-state="dirty"] {
+    background: var(--warn);
+    box-shadow: 0 0 0 2px var(--warn-soft);
 }
 
-.status-pill[data-state="error"] {
-    background: var(--danger-soft);
-    color: var(--danger);
+.status-dot[data-state="error"] {
+    background: var(--danger);
+    box-shadow: 0 0 0 2px var(--danger-soft);
 }
 
 .sr-only {
@@ -795,6 +791,11 @@ html[data-theme="dark"] .theme-icon-sun {
     display: block;
 }
 
+.icon-btn i {
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
 .icon-btn-lg {
     width: 2.1rem;
     height: 2.1rem;
@@ -1007,9 +1008,33 @@ html[data-theme="dark"] .theme-icon-sun {
     display: none !important;
 }
 
-.pdf-zoom-label {
+.pdf-zoom-field {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.pdf-zoom-input {
+    width: 3.1rem;
     min-width: 3.1rem;
+    padding-right: 0.15rem;
     font-variant-numeric: tabular-nums;
+    text-align: center;
+    -moz-appearance: textfield;
+}
+
+.pdf-zoom-input::-webkit-outer-spin-button,
+.pdf-zoom-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.pdf-zoom-suffix {
+    position: absolute;
+    right: 0.35rem;
+    font-size: 0.68rem;
+    color: var(--ink-muted);
+    pointer-events: none;
 }
 
 /* Único viewport de rolagem do PDF — barra fica fixa na lateral do painel */

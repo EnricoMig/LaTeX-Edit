@@ -21,6 +21,7 @@ const els = {
     cursorPos: document.getElementById("cursor-pos"),
     charCount: document.getElementById("char-count"),
     statusSync: document.getElementById("status-sync"),
+    statusSyncLabel: document.getElementById("status-sync-label"),
     docName: document.getElementById("doc-name"),
     autosaveHint: document.getElementById("autosave-hint"),
     workspaceMode: document.getElementById("workspace-mode"),
@@ -35,9 +36,7 @@ const els = {
     logBody: document.getElementById("log-body"),
     btnSave: document.getElementById("btn-save"),
     btnOpenFolder: document.getElementById("btn-open-folder"),
-    btnExportPdf: document.getElementById("btn-export-pdf"),
     btnDownloadPdf: document.getElementById("btn-download-pdf"),
-    btnDownloadPdfPane: document.getElementById("btn-download-pdf-pane"),
     btnToggleExplorer: document.getElementById("btn-toggle-explorer"),
     btnToggleLog: document.getElementById("btn-toggle-log"),
     btnCloseLog: document.getElementById("btn-close-log"),
@@ -52,7 +51,7 @@ const els = {
     pdfZoom: document.getElementById("pdf-zoom"),
     btnPdfZoomIn: document.getElementById("btn-pdf-zoom-in"),
     btnPdfZoomOut: document.getElementById("btn-pdf-zoom-out"),
-    btnPdfZoomFit: document.getElementById("btn-pdf-zoom-fit"),
+    pdfZoomValue: document.getElementById("pdf-zoom-value"),
     inputTex: document.getElementById("input-tex"),
     inputPdf: document.getElementById("input-pdf"),
     folderModal: document.getElementById("folder-modal"),
@@ -85,7 +84,11 @@ let compileQueued = false;
 
 function setStatus(state, label) {
     els.statusSync.dataset.state = state;
-    els.statusSync.textContent = label;
+    els.statusSync.title = label;
+    els.statusSync.setAttribute("aria-label", label);
+    if (els.statusSyncLabel) {
+        els.statusSyncLabel.textContent = label;
+    }
 }
 
 function markDirty(dirty) {
@@ -147,12 +150,28 @@ function syncLayoutTriggerIcon() {
 }
 
 function updatePdfZoomLabel(percent, fitMode) {
-    if (!els.btnPdfZoomFit) {
+    if (!els.pdfZoomValue) {
         return;
     }
-    els.btnPdfZoomFit.textContent = `${percent}%`;
-    els.btnPdfZoomFit.title =
-        fitMode === "width" ? "Ajustado à largura — clique para reajustar" : "Clique para ajustar à largura";
+    els.pdfZoomValue.value = percent;
+    els.pdfZoomValue.title =
+        fitMode === "width"
+            ? "Ajustado à largura — digite um valor ou use +/−"
+            : "Digite o zoom ou use +/−";
+}
+
+async function applyPdfZoomFromInput() {
+    if (!pdfViewer.pdf || !els.pdfZoomValue) {
+        return;
+    }
+    const raw = Number(els.pdfZoomValue.value);
+    if (!Number.isFinite(raw)) {
+        updatePdfZoomLabel(pdfViewer.getScalePercent(), pdfViewer.fitMode);
+        return;
+    }
+    const percent = Math.min(300, Math.max(50, Math.round(raw)));
+    els.pdfZoomValue.value = percent;
+    await pdfViewer.setScale(percent / 100);
 }
 
 function setPdfZoomVisible(visible) {
@@ -244,7 +263,7 @@ function showWelcomeViewer() {
         "Abra a pasta do projeto no NAS",
         `
           <p>Os arquivos ficam no <strong>servidor</strong> (volume Docker), não no PC do navegador.</p>
-          <p>Abra uma pasta, edite o <code>.tex</code>, clique em <strong>Gerar PDF</strong> (grava no NAS) ou <strong>Baixar PDF</strong>.</p>
+          <p>Abra uma pasta, edite o <code>.tex</code> e aguarde o auto-compile (~2s) ou use <strong>Ctrl+Enter</strong>. Baixe o PDF pelo ícone na barra superior.</p>
           <button type="button" class="btn btn-primary" id="welcome-open-folder">Abrir pasta no NAS</button>
         `
     );
@@ -305,7 +324,7 @@ function showCompileHint(_texPath) {
         "PDF final",
         `
           <p>O painel mostra o PDF do documento principal (<code>${escapeHtml(main || "main.tex")}</code>).</p>
-          <p>A geração grava o PDF no NAS. Use <strong>Gerar PDF</strong> ou aguarde o auto-compile ~2s após digitar.</p>
+          <p>A geração grava o PDF no NAS. Aguarde o auto-compile ~2s após digitar ou use <strong>Ctrl+Enter</strong>.</p>
         `
     );
 }
@@ -616,7 +635,6 @@ async function compilePdf({ auto = false } = {}) {
     }
 
     compileInFlight = true;
-    els.btnExportPdf.disabled = true;
     setStatus("dirty", auto ? "Auto-compilando…" : "Compilando…");
     touchAutosaveHint(`main: ${mainPath}`);
     setPdfBusy(true);
@@ -629,7 +647,6 @@ async function compilePdf({ auto = false } = {}) {
     } catch (error) {
         console.error(error);
         compileInFlight = false;
-        els.btnExportPdf.disabled = false;
         setPdfBusy(false);
         setStatus("error", "Sem backend");
         showViewerMessage(
@@ -692,7 +709,6 @@ async function compilePdf({ auto = false } = {}) {
         }
     } finally {
         compileInFlight = false;
-        els.btnExportPdf.disabled = false;
         setPdfBusy(false);
         if (compileQueued) {
             compileQueued = false;
@@ -708,7 +724,7 @@ async function downloadPdfFromServer() {
     const main = fs.resolveMainDocument(fs.getActivePath());
     const pdfPath = (main && fs.findCompanionPdf(main)) || viewerPdfPath;
     if (!pdfPath || !fs.isPdf(pdfPath)) {
-        window.alert("Gere o PDF primeiro (botão Gerar PDF) para baixar do NAS.");
+        window.alert("Aguarde a geração do PDF ou use Ctrl+Enter para compilar antes de baixar.");
         return;
     }
     try {
@@ -937,9 +953,7 @@ function bindEvents() {
         syncThemeToggle(els.btnTheme);
     });
     els.btnOpenFolder.addEventListener("click", openProjectFolder);
-    els.btnExportPdf.addEventListener("click", () => compilePdf({ auto: false }));
     els.btnDownloadPdf?.addEventListener("click", downloadPdfFromServer);
-    els.btnDownloadPdfPane?.addEventListener("click", downloadPdfFromServer);
     els.btnPdfZoomIn?.addEventListener("click", async () => {
         if (!pdfViewer.pdf) {
             return;
@@ -952,11 +966,18 @@ function bindEvents() {
         }
         await pdfViewer.zoomOut();
     });
-    els.btnPdfZoomFit?.addEventListener("click", async () => {
-        if (!pdfViewer.pdf) {
-            return;
+    els.pdfZoomValue?.addEventListener("focus", (event) => {
+        event.target.select();
+    });
+    els.pdfZoomValue?.addEventListener("change", () => {
+        applyPdfZoomFromInput();
+    });
+    els.pdfZoomValue?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            applyPdfZoomFromInput();
+            event.target.blur();
         }
-        await pdfViewer.fitWidth();
     });
 
     els.folderModal?.querySelectorAll("[data-close-modal]").forEach((el) => {
