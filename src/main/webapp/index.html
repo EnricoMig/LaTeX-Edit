@@ -42,14 +42,14 @@
             </div>
 
             <div class="topbar-center">
-                <label class="filename-wrap" title="Clique para renomear (F2)">
-                    <span class="sr-only">Nome do arquivo</span>
+                <label class="filename-wrap" title="Clique para renomear o projeto (F2)">
+                    <span class="sr-only">Nome do projeto</span>
                     <input
                         type="text"
-                        id="doc-name"
+                        id="project-name"
                         class="filename-input"
                         value=""
-                        placeholder="sem arquivo"
+                        placeholder="sem projeto"
                         spellcheck="false"
                         autocomplete="off"
                     >
@@ -345,15 +345,62 @@
                 <button type="button" class="icon-btn" data-close-settings title="Fechar">×</button>
             </div>
             <p class="modal-hint">Preferências do editor neste navegador.</p>
-            <div class="settings-list">
-                <label class="settings-row" for="setting-word-wrap">
-                    <span class="settings-copy">
-                        <strong>Word wrap</strong>
-                        <span>Quebra automática de linhas longas no editor</span>
-                    </span>
-                    <input type="checkbox" id="setting-word-wrap" checked>
-                </label>
-            </div>
+
+            <section class="settings-section">
+                <h3 class="settings-section-title">Editor</h3>
+                <div class="settings-list">
+                    <label class="settings-row" for="setting-word-wrap">
+                        <span class="settings-copy">
+                            <strong>Word wrap</strong>
+                            <span>Quebra automática de linhas longas no editor</span>
+                        </span>
+                        <input type="checkbox" id="setting-word-wrap" checked>
+                    </label>
+                </div>
+            </section>
+
+            <section class="settings-section">
+                <h3 class="settings-section-title">Aparência</h3>
+                <div class="settings-list">
+                    <label class="settings-field" for="setting-theme-mode">
+                        <span class="settings-copy">
+                            <strong>Tema</strong>
+                            <span>Claro, escuro ou conforme o sistema</span>
+                        </span>
+                        <select id="setting-theme-mode" class="settings-select">
+                            <option value="system">Sistema</option>
+                            <option value="light">Claro</option>
+                            <option value="dark">Escuro</option>
+                        </select>
+                    </label>
+                    <div class="settings-field settings-field-block">
+                        <span class="settings-copy">
+                            <strong>Cor de destaque</strong>
+                            <span>Botões, status e realces da interface</span>
+                        </span>
+                        <div class="accent-swatches" id="accent-preset-list">
+                            <button type="button" class="accent-swatch is-active" data-accent-preset="teal" title="Teal" aria-label="Teal"></button>
+                            <button type="button" class="accent-swatch" data-accent-preset="blue" title="Azul" aria-label="Azul"></button>
+                            <button type="button" class="accent-swatch" data-accent-preset="violet" title="Violeta" aria-label="Violeta"></button>
+                            <button type="button" class="accent-swatch" data-accent-preset="green" title="Verde" aria-label="Verde"></button>
+                            <button type="button" class="accent-swatch" data-accent-preset="orange" title="Laranja" aria-label="Laranja"></button>
+                            <button type="button" class="accent-swatch" data-accent-preset="rose" title="Rosa" aria-label="Rosa"></button>
+                            <button type="button" class="accent-swatch accent-swatch-custom" data-accent-preset="custom" title="Personalizada" aria-label="Cor personalizada">#</button>
+                        </div>
+                        <input type="color" id="setting-accent-custom" class="settings-color-input" value="#0d6e6e" hidden>
+                    </div>
+                </div>
+            </section>
+
+            <section class="settings-section">
+                <h3 class="settings-section-title">Templates LaTeX</h3>
+                <p class="modal-hint settings-template-hint">
+                    Crie snippets e insira no editor com <code>a!{nome}</code> + <kbd>Tab</kbd> ou <kbd>Enter</kbd>.
+                </p>
+                <div class="template-list" id="template-list"></div>
+                <button type="button" class="btn btn-secondary" id="btn-add-template">＋ Novo template</button>
+            </section>
+
             <div class="modal-toolbar settings-toolbar">
                 <button type="button" class="btn btn-primary" data-close-settings>Fechar</button>
             </div>

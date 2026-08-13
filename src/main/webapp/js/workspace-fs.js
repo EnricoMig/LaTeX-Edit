@@ -475,6 +475,19 @@ export class WorkspaceFs {
         } else if (this.workspace.activePath.startsWith(prefix)) {
             this.workspace.activePath = dest + this.workspace.activePath.slice(key.length);
         }
+
+        const expandedNext = new Set();
+        for (const expandedPath of this.workspace.expanded) {
+            if (expandedPath === key || expandedPath.startsWith(prefix)) {
+                expandedNext.add(
+                    expandedPath === key ? dest : dest + expandedPath.slice(key.length)
+                );
+            } else {
+                expandedNext.add(expandedPath);
+            }
+        }
+        this.workspace.expanded = expandedNext;
+
         return dest;
     }
 
@@ -492,25 +505,46 @@ export class WorkspaceFs {
     }
 
     /**
-     * Move um arquivo .tex para outra pasta do projeto ("" = raiz).
+     * Move arquivo ou pasta para outra pasta do projeto ("" = raiz).
      */
     async movePath(path, destDir) {
         const key = normalizePath(path);
-        if (!this.isFile(key)) {
-            throw new Error("Somente arquivos podem ser movidos por arrastar.");
-        }
-        if (!/\.tex$/i.test(key)) {
-            throw new Error("Somente arquivos .tex podem ser movidos por arrastar.");
+        if (!this.exists(key)) {
+            throw new Error("Item não encontrado.");
         }
         const destParent = normalizePath(destDir);
         if (destParent && !this.isDir(destParent)) {
             throw new Error("Pasta de destino inválida.");
+        }
+        if (this.isDir(key) && (destParent === key || destParent.startsWith(`${key}/`))) {
+            throw new Error("Não é possível mover uma pasta para dentro dela mesma.");
         }
         if (parentPath(key) === destParent) {
             return key;
         }
         const dest = destParent ? `${destParent}/${baseName(key)}` : baseName(key);
         return this.relocate(key, dest);
+    }
+
+    async renameProject(nextName) {
+        const trimmed = nextName.trim();
+        if (!this.projectRoot || !trimmed) {
+            throw new Error("Nome do projeto inválido.");
+        }
+        if (trimmed === baseName(this.projectRoot)) {
+            return this.projectRoot;
+        }
+        const parent = parentPath(this.projectRoot);
+        const dest = parent ? `${parent}/${trimmed}` : trimmed;
+        await apiJson("POST", "/api/fs/rename", {
+            from: this.projectRoot,
+            to: dest,
+        });
+        this.projectRoot = dest;
+        this.workspace.name = trimmed;
+        this.persistProject();
+        await this.openServerFolder(dest);
+        return dest;
     }
 
     resolveMainDocument(preferredPath) {

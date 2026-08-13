@@ -18,10 +18,6 @@ function iconFor(type, kind) {
     return "T";
 }
 
-function isTexPath(path) {
-    return /\.tex$/i.test(path || "");
-}
-
 function hasDnDPayload(dataTransfer) {
     if (!dataTransfer?.types) {
         return false;
@@ -182,19 +178,34 @@ export function createExplorer({
         return null;
     }
 
+    function isInvalidDrop(source, destDir) {
+        if (!source) {
+            return false;
+        }
+        const dest = destDir ?? "";
+        if (source === dest) {
+            return true;
+        }
+        if (fs.isDir(source) && (dest === source || dest.startsWith(`${source}/`))) {
+            return true;
+        }
+        return false;
+    }
+
     async function commitMove(sourcePath, destDir) {
         if (moveInFlight) {
             return;
         }
         const source = sourcePath;
         const targetDir = destDir ?? "";
-        if (!source || !isTexPath(source)) {
+        if (!source) {
             return;
         }
         if (parentPath(source) === targetDir) {
             return;
         }
-        const wasActive = fs.getActivePath() === source;
+        const wasActive =
+            fs.getActivePath() === source || fs.getActivePath().startsWith(`${source}/`);
         moveInFlight = true;
         try {
             const moved = await fs.movePath(source, targetDir);
@@ -203,10 +214,14 @@ export function createExplorer({
             }
             onTreeChanged?.();
             if (wasActive) {
-                onOpenFile?.(moved, { force: true });
+                if (fs.isFile(moved)) {
+                    onOpenFile?.(moved, { force: true });
+                } else {
+                    render();
+                }
             }
         } catch (error) {
-            window.alert(error.message || "Não foi possível mover o arquivo.");
+            window.alert(error.message || "Não foi possível mover o item.");
             render();
         } finally {
             moveInFlight = false;
@@ -339,7 +354,7 @@ export function createExplorer({
                 const label = isRenaming
                     ? `<input class="tree-rename" data-rename="${row.path}" value="${baseName(row.path).replaceAll('"', "&quot;")}" />`
                     : `<span class="tree-label">${row.name}</span>`;
-                const canDrag = row.type === "file" && isTexPath(row.path) && !isRenaming;
+                const canDrag = !isRenaming;
 
                 return `
                     <div
@@ -400,7 +415,7 @@ export function createExplorer({
 
     treeEl.addEventListener("dragstart", (event) => {
         const row = event.target.closest(".tree-row");
-        if (!row || row.dataset.type !== "file" || !isTexPath(row.dataset.path) || renamingPath) {
+        if (!row || renamingPath) {
             event.preventDefault();
             return;
         }
@@ -426,7 +441,7 @@ export function createExplorer({
             return;
         }
         const source = dragSourcePath || "";
-        if (source && parentPath(source) === destDir) {
+        if (isInvalidDrop(source, destDir)) {
             clearDropHighlights();
             return;
         }
@@ -458,7 +473,7 @@ export function createExplorer({
             dragSourcePath;
         const destDir = resolveDropTarget(event);
         clearDragState();
-        if (!source || destDir === null) {
+        if (!source || destDir === null || isInvalidDrop(source, destDir)) {
             return;
         }
         commitMove(source, destDir);

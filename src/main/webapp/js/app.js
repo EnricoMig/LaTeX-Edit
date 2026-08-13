@@ -7,9 +7,10 @@ import {
 } from "./editor.js";
 import { createAutocomplete } from "./autocomplete.js";
 import { createExplorer } from "./explorer.js";
-import { applyTheme, getStoredTheme, syncThemeToggle, toggleTheme } from "./theme.js";
-import { applyEditorWordWrap, createSettingsPage, loadSettings } from "./settings.js";
-import { WorkspaceFs, baseName, ensureTexExtension, parentPath } from "./workspace-fs.js";
+import { syncThemeToggle, toggleTheme } from "./theme.js";
+import { applyEditorWordWrap, applySettingsToAppearance, createSettingsPage, loadSettings, saveSettings } from "./settings.js";
+import { bindTemplateExpansion } from "./templates.js";
+import { WorkspaceFs, baseName, parentPath } from "./workspace-fs.js";
 import { checkHealth, compileProject, getApiBase } from "./api.js";
 import { PdfViewer } from "./pdf-viewer.js";
 
@@ -22,7 +23,7 @@ const els = {
     charCount: document.getElementById("char-count"),
     statusSync: document.getElementById("status-sync"),
     statusSyncLabel: document.getElementById("status-sync-label"),
-    docName: document.getElementById("doc-name"),
+    projectName: document.getElementById("project-name"),
     autosaveHint: document.getElementById("autosave-hint"),
     workspaceMode: document.getElementById("workspace-mode"),
     splitter: document.getElementById("splitter"),
@@ -44,6 +45,11 @@ const els = {
     btnSettings: document.getElementById("btn-settings"),
     settingsModal: document.getElementById("settings-modal"),
     settingWordWrap: document.getElementById("setting-word-wrap"),
+    settingThemeMode: document.getElementById("setting-theme-mode"),
+    accentPresetList: document.getElementById("accent-preset-list"),
+    settingAccentCustom: document.getElementById("setting-accent-custom"),
+    templateList: document.getElementById("template-list"),
+    btnAddTemplate: document.getElementById("btn-add-template"),
     layoutButtons: [...document.querySelectorAll(".layout-btn")],
     btnLayoutMenu: document.getElementById("btn-layout-menu"),
     layoutMenu: document.getElementById("layout-menu"),
@@ -101,10 +107,10 @@ function refreshEditorChrome() {
     updateCursorMeta(els.editor, els.cursorPos, els.charCount);
 }
 
-function syncDocNameInput(path) {
-    els.docName.value = path ? baseName(path) : "";
-    els.docName.title = path || "Sem arquivo";
-    els.docName.disabled = !path || !fs.isOpen();
+function syncProjectNameInput() {
+    els.projectName.value = fs.isOpen() ? fs.getName() : "";
+    els.projectName.title = fs.isOpen() ? `Projeto: ${fs.getProjectRoot()}` : "Sem projeto";
+    els.projectName.disabled = !fs.isOpen();
 }
 
 function updateWorkspaceModeLabel() {
@@ -469,12 +475,13 @@ async function confirmOpenServerFolder() {
             applyExplorerVisibility();
         }
         updateWorkspaceModeLabel();
+        syncProjectNameInput();
         explorer.render();
         const active = fs.getActivePath();
         if (active) {
             await openFile(active, { force: true });
         } else {
-            syncDocNameInput("");
+            syncProjectNameInput();
             setEditorEnabled(false);
             els.editor.value = "% Pasta vazia — crie um arquivo .tex\n";
             refreshEditorChrome();
@@ -492,7 +499,6 @@ async function confirmOpenServerFolder() {
 
 async function openFile(path, { force = false } = {}) {
     if (!path) {
-        syncDocNameInput("");
         setEditorEnabled(false);
         if (!fs.isOpen()) {
             showWelcomeViewer();
@@ -522,7 +528,6 @@ async function openFile(path, { force = false } = {}) {
 
     try {
         fs.setActivePath(path);
-        syncDocNameInput(path);
 
         if (fs.isPdf(path)) {
             setEditorEnabled(false);
@@ -756,50 +761,25 @@ function escapeHtml(text) {
         .replaceAll(">", "&gt;");
 }
 
-async function renameActiveFile(nextName) {
-    const path = fs.getActivePath();
-    if (!path || !fs.isOpen()) {
+async function renameProject(nextName) {
+    if (!fs.isOpen()) {
         return;
     }
-    if (fs.isPdf(path)) {
-        const desired = nextName.trim().toLowerCase().endsWith(".pdf")
-            ? nextName.trim()
-            : `${nextName.trim().replace(/\.pdf$/i, "")}.pdf`;
-        if (desired === baseName(path)) {
-            syncDocNameInput(path);
-            return;
-        }
-        try {
-            const renamed = await fs.renamePath(path, desired);
-            syncDocNameInput(renamed);
-            if (viewerPdfPath === path) {
-                viewerPdfPath = renamed;
-                els.previewMode.textContent = baseName(renamed);
-            }
-            explorer.render();
-            touchAutosaveHint();
-            setStatus("idle", "Renomeado");
-        } catch (error) {
-            window.alert(error.message || "Não foi possível renomear.");
-            syncDocNameInput(path);
-        }
-        return;
-    }
-
-    const desired = ensureTexExtension(nextName);
-    if (desired === baseName(path)) {
-        syncDocNameInput(path);
+    const trimmed = nextName.trim();
+    if (!trimmed || trimmed === fs.getName()) {
+        syncProjectNameInput();
         return;
     }
     try {
-        const renamed = await fs.renamePath(path, desired);
-        syncDocNameInput(renamed);
+        await fs.renameProject(trimmed);
+        syncProjectNameInput();
+        updateWorkspaceModeLabel();
         explorer.render();
-        touchAutosaveHint();
-        setStatus("idle", "Renomeado");
+        touchAutosaveHint(`Projeto renomeado: ${fs.getName()}`);
+        setStatus("idle", "Projeto renomeado");
     } catch (error) {
-        window.alert(error.message || "Não foi possível renomear.");
-        syncDocNameInput(path);
+        window.alert(error.message || "Não foi possível renomear o projeto.");
+        syncProjectNameInput();
     }
 }
 
@@ -900,17 +880,35 @@ const autocomplete = createAutocomplete({
 
 function applySettingsToUi(settings) {
     applyEditorWordWrap(els.editor, settings.wordWrap);
+    applySettingsToAppearance(settings);
+    syncThemeToggle(els.btnTheme);
 }
 
 const settingsPage = createSettingsPage({
     modalEl: els.settingsModal,
     openBtn: els.btnSettings,
     wordWrapInput: els.settingWordWrap,
+    themeModeSelect: els.settingThemeMode,
+    accentPresetContainer: els.accentPresetList,
+    accentCustomInput: els.settingAccentCustom,
+    templateListEl: els.templateList,
+    btnAddTemplate: els.btnAddTemplate,
     onChange: (settings) => {
         applySettingsToUi(settings);
         refreshEditorChrome();
     },
 });
+
+bindTemplateExpansion(
+    els.editor,
+    () => loadSettings().templates || {},
+    () => {
+        markDirty(true);
+        refreshEditorChrome();
+        scheduleAutoCompile();
+        autocomplete.refresh();
+    }
+);
 
 function bindEvents() {
     els.editor.addEventListener("input", () => {
@@ -949,7 +947,11 @@ function bindEvents() {
 
     els.btnSave.addEventListener("click", () => saveDocument());
     els.btnTheme.addEventListener("click", () => {
-        toggleTheme();
+        const next = toggleTheme();
+        saveSettings({ themeMode: next });
+        if (els.settingThemeMode) {
+            els.settingThemeMode.value = next;
+        }
         syncThemeToggle(els.btnTheme);
     });
     els.btnOpenFolder.addEventListener("click", openProjectFolder);
@@ -1041,27 +1043,27 @@ function bindEvents() {
         }
     });
 
-    els.docName.addEventListener("keydown", async (event) => {
+    els.projectName.addEventListener("keydown", async (event) => {
         if (event.key === "Enter") {
             event.preventDefault();
             suppressNameBlur = true;
-            await renameActiveFile(els.docName.value);
+            await renameProject(els.projectName.value);
             els.editor.focus();
             window.setTimeout(() => {
                 suppressNameBlur = false;
             }, 0);
         }
         if (event.key === "Escape") {
-            syncDocNameInput(fs.getActivePath());
+            syncProjectNameInput();
             els.editor.focus();
         }
     });
 
-    els.docName.addEventListener("blur", () => {
+    els.projectName.addEventListener("blur", () => {
         if (suppressNameBlur) {
             return;
         }
-        renameActiveFile(els.docName.value);
+        renameProject(els.projectName.value);
     });
 
     document.addEventListener("keydown", (event) => {
@@ -1087,18 +1089,17 @@ function bindEvents() {
             event.preventDefault();
             compilePdf();
         }
-        if (event.key === "F2" && document.activeElement === els.editor) {
+        if (event.key === "F2") {
             event.preventDefault();
-            els.docName.focus();
-            els.docName.select();
+            els.projectName.focus();
+            els.projectName.select();
         }
     });
 }
 
 async function init() {
-    applyTheme(getStoredTheme());
-    syncThemeToggle(els.btnTheme);
-    applySettingsToUi(loadSettings());
+    const settings = loadSettings();
+    applySettingsToUi(settings);
     applyExplorerVisibility();
     applyLayoutMode();
     setLogOpen(false);
@@ -1149,6 +1150,7 @@ async function init() {
     const restored = await fs.tryRestoreFolder();
     if (restored) {
         updateWorkspaceModeLabel();
+        syncProjectNameInput();
         explorer.render();
         const active = fs.getActivePath();
         if (active) {
