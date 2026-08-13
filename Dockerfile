@@ -29,6 +29,7 @@ RUN apt-get update \
         texlive-lang-portuguese \
         texlive-science \
         latexmk \
+        lmodern \
         ghostscript \
         fonts-liberation \
     && rm -rf /var/lib/apt/lists/* \
