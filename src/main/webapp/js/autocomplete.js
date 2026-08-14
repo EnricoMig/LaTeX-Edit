@@ -1,3 +1,4 @@
+import { replaceRange } from "./editor.js";
 import {
     buildFileSuggestions,
     listCommandSuggestions,
@@ -129,13 +130,10 @@ function detectTrigger(value, caret) {
 }
 
 function applySnippet(editor, from, to, insertText) {
-    const value = editor.value;
     const marker = insertText.indexOf("$0");
     const plain = insertText.replace("$0", "");
-    const next = `${value.slice(0, from)}${plain}${value.slice(to)}`;
-    editor.value = next;
     const caret = from + (marker >= 0 ? marker : plain.length);
-    editor.selectionStart = editor.selectionEnd = caret;
+    replaceRange(editor, from, to, plain, caret);
     editor.focus();
 }
 
@@ -282,7 +280,6 @@ export function createAutocomplete({ editor, getProjectTexPaths, getTemplates })
         const item = items[index];
         applySnippet(editor, trigger.from, trigger.to, item.insert);
         hide();
-        editor.dispatchEvent(new Event("input", { bubbles: true }));
         return true;
     }
 

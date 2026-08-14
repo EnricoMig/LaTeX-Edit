@@ -1,10 +1,14 @@
 import {
     DEFAULT_PROJECT_MAIN,
+    applyLatexFormat,
+    indentSelection,
     insertAtCursor,
+    insertSmartNewline,
     insertTab,
     updateCursorMeta,
     updateLineNumbers,
 } from "./editor.js";
+import { createUndoHistory } from "./undo.js";
 import { createAutocomplete } from "./autocomplete.js";
 import { createExplorer } from "./explorer.js";
 import { syncThemeToggle, toggleTheme } from "./theme.js";
@@ -23,6 +27,7 @@ const els = {
     previewMode: document.getElementById("preview-mode"),
     cursorPos: document.getElementById("cursor-pos"),
     charCount: document.getElementById("char-count"),
+    btnFormat: document.getElementById("btn-format"),
     statusSync: document.getElementById("status-sync"),
     statusSyncLabel: document.getElementById("status-sync-label"),
     projectName: document.getElementById("project-name"),
@@ -347,7 +352,7 @@ function showWelcomeViewer() {
         openProjectFolder();
     });
     setEditorEnabled(false);
-    els.editor.value = "% Abra uma pasta do NAS para começar.\n";
+    setEditorValue("% Abra uma pasta do NAS para começar.\n");
     refreshEditorChrome();
 }
 
@@ -553,7 +558,7 @@ async function confirmOpenServerFolder() {
         } else {
             syncProjectNameInput();
             setEditorEnabled(false);
-            els.editor.value = "% Pasta vazia — crie um arquivo .tex\n";
+            setEditorValue("% Pasta vazia — crie um arquivo .tex\n");
             refreshEditorChrome();
             showViewerMessage("Pasta vazia", "<p>Crie um arquivo .tex na navegação.</p>");
             markDirty(false);
@@ -573,7 +578,7 @@ async function openFile(path, { force = false } = {}) {
         if (!fs.isOpen()) {
             showWelcomeViewer();
         } else {
-            els.editor.value = "";
+            setEditorValue("");
             refreshEditorChrome();
             showViewerMessage("Sem arquivo", "<p>Selecione um arquivo na navegação.</p>");
         }
@@ -601,20 +606,20 @@ async function openFile(path, { force = false } = {}) {
 
         if (fs.isPdf(path)) {
             setEditorEnabled(false);
-            els.editor.value = `% Visualizando PDF: ${path}`;
+            setEditorValue(`% Visualizando PDF: ${path}`);
             refreshEditorChrome();
             markDirty(false);
             await renderPdfViewer(path);
         } else if (!fs.isTextFile(path)) {
             setEditorEnabled(false);
-            els.editor.value = `% Recurso: ${path}`;
+            setEditorValue(`% Recurso: ${path}`);
             refreshEditorChrome();
             markDirty(false);
             showViewerMessage("Recurso", `<p>Arquivo binário: <code>${baseName(path)}</code></p>`);
         } else {
             const content = await fs.readFile(path);
             setEditorEnabled(true);
-            els.editor.value = content;
+            setEditorValue(content);
             refreshEditorChrome();
             markDirty(false);
             showCompileHint(path);
@@ -986,7 +991,13 @@ const autocomplete = createAutocomplete({
     getTemplates: () => loadSettings().templates || {},
 });
 
+const undoHistory = createUndoHistory(els.editor);
 const syntaxHighlight = bindSyntaxHighlight(els.editor, els.editorHighlight);
+
+function setEditorValue(value) {
+    els.editor.value = value;
+    undoHistory.reset();
+}
 
 function applySettingsToUi(settings) {
     applyEditorWordWrap(els.editor, settings.wordWrap);
@@ -1047,20 +1058,45 @@ function bindEvents() {
         updateCursorMeta(els.editor, els.cursorPos, els.charCount);
     });
     els.editor.addEventListener("keydown", (event) => {
+        if (event.defaultPrevented) {
+            return;
+        }
         if (autocomplete.onKeyDown(event)) {
             refreshEditorChrome();
             return;
         }
-        if (event.key !== "Tab" || els.editor.readOnly) {
+        if (els.editor.readOnly) {
+            return;
+        }
+        if (event.key === "Enter" && !event.ctrlKey && !event.metaKey) {
+            event.preventDefault();
+            insertSmartNewline(els.editor);
+            return;
+        }
+        if (event.key !== "Tab") {
             return;
         }
         event.preventDefault();
+        if (event.shiftKey) {
+            indentSelection(els.editor, -1);
+            return;
+        }
+        const selected = els.editor.value.slice(els.editor.selectionStart, els.editor.selectionEnd);
+        if (selected.includes("\n")) {
+            indentSelection(els.editor, 1);
+            return;
+        }
         insertTab(els.editor);
-        markDirty(true);
-        refreshEditorChrome();
     });
 
     els.btnSave.addEventListener("click", () => saveDocument());
+    els.btnFormat?.addEventListener("click", () => {
+        if (els.editor.readOnly) {
+            return;
+        }
+        applyLatexFormat(els.editor);
+        els.editor.focus();
+    });
     els.btnTheme.addEventListener("click", () => {
         const next = toggleTheme();
         saveSettings({ themeMode: next });
@@ -1239,6 +1275,17 @@ function bindEvents() {
         if (mod && event.key === "Enter") {
             event.preventDefault();
             compilePdf();
+        }
+        if (event.altKey && event.shiftKey && event.key.toLowerCase() === "f") {
+            if (els.editor.readOnly) {
+                return;
+            }
+            if (event.target !== els.editor && event.target !== els.btnFormat) {
+                return;
+            }
+            event.preventDefault();
+            applyLatexFormat(els.editor);
+            els.editor.focus();
         }
         if (event.key === "F2") {
             event.preventDefault();

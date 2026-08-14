@@ -1833,6 +1833,7 @@ html[data-theme="dark"] .theme-icon-sun {
 
 .pane-meta {
     display: flex;
+    align-items: center;
     gap: 0.75rem;
     font-family: var(--font-mono);
     font-size: 0.72rem;

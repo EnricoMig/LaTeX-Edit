@@ -1,3 +1,5 @@
+import { replaceRange } from "./editor.js";
+
 const TEMPLATE_PATTERN = /\\template\{([^{}\n]+)\}$/;
 
 export function tryExpandTemplate(editor, templates) {
@@ -16,10 +18,7 @@ export function tryExpandTemplate(editor, templates) {
         return false;
     }
     const start = pos - match[0].length;
-    editor.value = before.slice(0, start) + content + editor.value.slice(pos);
-    const caret = start + content.length;
-    editor.selectionStart = caret;
-    editor.selectionEnd = caret;
+    replaceRange(editor, start, pos, content);
     return true;
 }
 
@@ -28,12 +27,21 @@ export function bindTemplateExpansion(editor, getTemplates, onApplied) {
         return;
     }
 
+    let expanding = false;
     const attempt = () => {
-        if (tryExpandTemplate(editor, getTemplates())) {
-            onApplied?.();
-            return true;
+        if (expanding) {
+            return false;
         }
-        return false;
+        expanding = true;
+        try {
+            if (tryExpandTemplate(editor, getTemplates())) {
+                onApplied?.();
+                return true;
+            }
+            return false;
+        } finally {
+            expanding = false;
+        }
     };
 
     editor.addEventListener("keydown", (event) => {

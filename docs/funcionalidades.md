@@ -16,6 +16,8 @@ Lista do que a IDE oferece hoje, do ponto de vista do usuário.
 ## Edição
 
 - Editor Source com numeração de linhas  
+- Desfazer / refazer (Ctrl+Z, Ctrl+Y ou Ctrl+Shift+Z)  
+- Ajustar indentação de `\begin` / `\end` (botão no Source ou Shift+Alt+F)  
 - Salvar (botão / Ctrl+S)  
 - Word wrap (Configurações ⚙)  
 - Tema claro / escuro  
@@ -55,6 +57,10 @@ Preferências ficam no `localStorage` do navegador (por máquina/perfil).
 | Atalho | Ação |
 |--------|------|
 | Ctrl+S | Salvar |
+| Ctrl+Z | Desfazer |
+| Ctrl+Y / Ctrl+Shift+Z | Refazer |
+| Shift+Alt+F | Ajustar indentação |
+| Tab / Shift+Tab | Indentar / recuar linhas |
 | Ctrl+Enter | Gerar PDF |
 | Ctrl+B | Mostrar/ocultar arquivos |
 | Ctrl+Espaço | Autocomplete |

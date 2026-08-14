@@ -30,6 +30,8 @@ Modos de layout (`localStorage.latexedit.layout`):
 | `workspace-fs.js` | Cliente do filesystem remoto + árvore em memória |
 | `explorer.js` | Render da árvore, context menu, DnD, rename inline |
 | `editor.js` | Linhas, cursor, insert tab/texto, template `main.tex` |
+| `undo.js` | Histórico de desfazer/refazer do editor |
+| `format-latex.js` | Reindentação por `\begin` / `\end` |
 | `autocomplete.js` | Popup de sugestões + caret coordinates |
 | `latex-catalog.js` | Catálogo de comandos/ambientes |
 | `pdf-viewer.js` | PDF.js: fit width, zoom ±, ResizeObserver |
@@ -76,9 +78,11 @@ CSS garante `[hidden]` com `display: none !important` (evita conflito com `displ
 
 ## Editor
 
-- `<textarea class="editor">` — sem highlighter (propositalmente simples)  
+- `<textarea class="editor">` com overlay de highlight  
 - Word wrap: classe `is-word-wrap` + `wrap="soft"`  
-- Tab insere `\t` (não muda foco)  
+- Tab insere `\t`; seleção em várias linhas indenta; Shift+Tab recua  
+- Enter copia indentação e avança um nível após `\begin{...}`  
+- Shift+Alt+F (ou botão indent no Source) reindenta o arquivo  
 - Autocomplete: digitar `\…`, `\begin{`, `\input{` / `\include{`, ou **Ctrl+Espaço**
 
 ### Autocomplete
@@ -112,6 +116,10 @@ Extensível: novos toggles em `settings.js` (`DEFAULTS` + form).
 | Atalho | Ação |
 |--------|------|
 | Ctrl+S | Salvar |
+| Ctrl+Z | Desfazer |
+| Ctrl+Y / Ctrl+Shift+Z | Refazer |
+| Shift+Alt+F | Ajustar indentação |
+| Tab / Shift+Tab | Indentar / recuar seleção |
 | Ctrl+Enter | Gerar PDF |
 | Ctrl+B | Toggle explorer |
 | F2 | Renomear (foco no nome / editor) |
