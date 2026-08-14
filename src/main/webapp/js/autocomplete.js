@@ -94,6 +94,16 @@ function detectTrigger(value, caret) {
         };
     }
 
+    match = before.match(/\\template\{([^{}\n]*)$/);
+    if (match) {
+        return {
+            kind: "template",
+            query: match[1],
+            from: caret - match[0].length,
+            to: caret,
+        };
+    }
+
     match = before.match(/\\(input|include)\{([^}\n]*)$/);
     if (match) {
         return {
@@ -129,7 +139,7 @@ function applySnippet(editor, from, to, insertText) {
     editor.focus();
 }
 
-export function createAutocomplete({ editor, getProjectTexPaths }) {
+export function createAutocomplete({ editor, getProjectTexPaths, getTemplates }) {
     const popup = document.createElement("div");
     popup.className = "ac-popup";
     popup.hidden = true;
@@ -217,6 +227,18 @@ export function createAutocomplete({ editor, getProjectTexPaths }) {
                 0,
                 MAX_ITEMS
             );
+        }
+        if (currentTrigger.kind === "template") {
+            const templates = typeof getTemplates === "function" ? getTemplates() : {};
+            const query = (currentTrigger.query || "").toLowerCase();
+            return Object.keys(templates)
+                .filter((name) => !query || name.toLowerCase().includes(query))
+                .slice(0, MAX_ITEMS)
+                .map((name) => ({
+                    label: `\\template{${name}}`,
+                    insert: String(templates[name] ?? ""),
+                    detail: "Template",
+                }));
         }
         return listCommandSuggestions(currentTrigger.query).slice(0, MAX_ITEMS);
     }

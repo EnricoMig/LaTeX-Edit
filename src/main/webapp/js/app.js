@@ -10,12 +10,14 @@ import { createExplorer } from "./explorer.js";
 import { syncThemeToggle, toggleTheme } from "./theme.js";
 import { applyEditorWordWrap, applySettingsToAppearance, createSettingsPage, loadSettings, saveSettings } from "./settings.js";
 import { bindTemplateExpansion } from "./templates.js";
+import { bindSyntaxHighlight } from "./highlight.js";
 import { WorkspaceFs, baseName, parentPath } from "./workspace-fs.js";
 import { checkHealth, compileProject, getApiBase } from "./api.js";
 import { PdfViewer } from "./pdf-viewer.js";
 
 const els = {
     editor: document.getElementById("editor"),
+    editorHighlight: document.getElementById("editor-highlight"),
     lineNumbers: document.getElementById("line-numbers"),
     preview: document.getElementById("preview"),
     previewMode: document.getElementById("preview-mode"),
@@ -42,6 +44,7 @@ const els = {
     downloadMenuWrap: document.getElementById("download-menu-wrap"),
     btnToggleExplorer: document.getElementById("btn-toggle-explorer"),
     btnToggleLog: document.getElementById("btn-toggle-log"),
+    btnCopyLog: document.getElementById("btn-copy-log"),
     btnCloseLog: document.getElementById("btn-close-log"),
     btnTheme: document.getElementById("btn-theme"),
     btnSettings: document.getElementById("btn-settings"),
@@ -52,6 +55,9 @@ const els = {
     settingAccentCustom: document.getElementById("setting-accent-custom"),
     templateList: document.getElementById("template-list"),
     btnAddTemplate: document.getElementById("btn-add-template"),
+    templateEditor: document.getElementById("template-editor"),
+    templateEditorName: document.getElementById("template-editor-name"),
+    templateEditorBody: document.getElementById("template-editor-body"),
     layoutButtons: [...document.querySelectorAll(".layout-btn")],
     btnLayoutMenu: document.getElementById("btn-layout-menu"),
     layoutMenu: document.getElementById("layout-menu"),
@@ -78,6 +84,7 @@ let suppressNameBlur = false;
 let viewerPdfPath = "";
 let explorerOpen = localStorage.getItem("latexedit.explorerOpen") !== "0";
 let logOpen = false;
+let copyLogResetTimer = null;
 let layoutMode = localStorage.getItem("latexedit.layout") || "split";
 if (!["split", "editor", "pdf"].includes(layoutMode)) {
     layoutMode = "split";
@@ -107,6 +114,7 @@ function markDirty(dirty) {
 function refreshEditorChrome() {
     updateLineNumbers(els.editor, els.lineNumbers);
     updateCursorMeta(els.editor, els.cursorPos, els.charCount);
+    syntaxHighlight?.paint();
 }
 
 function syncProjectNameInput() {
@@ -246,6 +254,66 @@ function setLogOpen(open, { focus = false } = {}) {
 
 function setCompileLog(text) {
     els.logBody.textContent = text || "";
+}
+
+async function copyCompileLog() {
+    const text = els.logBody.textContent ?? "";
+    if (!text.trim()) {
+        return;
+    }
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            copyTextFallback(text);
+        }
+        flashCopyLogSuccess();
+    } catch (err) {
+        try {
+            copyTextFallback(text);
+            flashCopyLogSuccess();
+        } catch (fallbackErr) {
+            console.error("Não foi possível copiar o log", fallbackErr);
+        }
+    }
+}
+
+function copyTextFallback(text) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    if (!ok) {
+        throw new Error("execCommand copy failed");
+    }
+}
+
+function flashCopyLogSuccess() {
+    const btn = els.btnCopyLog;
+    if (!btn) {
+        return;
+    }
+    const icon = btn.querySelector("i");
+    btn.classList.add("is-copied");
+    btn.title = "Copiado";
+    btn.setAttribute("aria-label", "Log copiado");
+    if (icon) {
+        icon.className = "fa-solid fa-check";
+    }
+    clearTimeout(copyLogResetTimer);
+    copyLogResetTimer = setTimeout(() => {
+        btn.classList.remove("is-copied");
+        btn.title = "Copiar log";
+        btn.setAttribute("aria-label", "Copiar texto do log");
+        if (icon) {
+            icon.className = "fa-regular fa-copy";
+        }
+    }, 1600);
 }
 
 function showViewerMessage(title, bodyHtml) {
@@ -659,7 +727,7 @@ async function compilePdf({ auto = false } = {}) {
         showViewerMessage(
             "Backend indisponível",
             `<p>Não foi possível conectar em <code>${getApiBase()}</code>.</p>
-             <p>Verifique o container LaTeX Edit no NAS.</p>`
+             <p>Verifique o container LaTeX IDE no NAS.</p>`
         );
         if (!auto) {
             window.alert(`Backend indisponível em ${getApiBase()}`);
@@ -915,12 +983,17 @@ const autocomplete = createAutocomplete({
     editor: els.editor,
     getProjectTexPaths: () =>
         Object.keys(fs.workspace?.entries || {}).filter((path) => /\.tex$/i.test(path)),
+    getTemplates: () => loadSettings().templates || {},
 });
+
+const syntaxHighlight = bindSyntaxHighlight(els.editor, els.editorHighlight);
 
 function applySettingsToUi(settings) {
     applyEditorWordWrap(els.editor, settings.wordWrap);
+    els.editorHighlight?.classList.toggle("is-word-wrap", Boolean(settings.wordWrap));
     applySettingsToAppearance(settings);
     syncThemeToggle(els.btnTheme);
+    syntaxHighlight?.paint();
 }
 
 const settingsPage = createSettingsPage({
@@ -932,6 +1005,9 @@ const settingsPage = createSettingsPage({
     accentCustomInput: els.settingAccentCustom,
     templateListEl: els.templateList,
     btnAddTemplate: els.btnAddTemplate,
+    templateEditorEl: els.templateEditor,
+    templateNameInput: els.templateEditorName,
+    templateBodyInput: els.templateEditorBody,
     onChange: (settings) => {
         applySettingsToUi(settings);
         refreshEditorChrome();
@@ -1086,6 +1162,9 @@ function bindEvents() {
     });
     els.btnToggleLog.addEventListener("click", () => {
         setLogOpen(!logOpen);
+    });
+    els.btnCopyLog?.addEventListener("click", () => {
+        copyCompileLog();
     });
     els.btnCloseLog.addEventListener("click", () => {
         setLogOpen(false);

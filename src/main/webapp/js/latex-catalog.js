@@ -6,6 +6,7 @@
 const COMMANDS = [
     { label: "\\documentclass{}", insert: "\\documentclass{$0}", detail: "Classe do documento" },
     { label: "\\usepackage{}", insert: "\\usepackage{$0}", detail: "Pacote" },
+    { label: "\\template{}", insert: "\\template{$0}", detail: "Inserir template" },
     { label: "\\usepackage[]{}", insert: "\\usepackage[$0]{}", detail: "Pacote com opções" },
     { label: "\\title{}", insert: "\\title{$0}", detail: "Título" },
     { label: "\\author{}", insert: "\\author{$0}", detail: "Autor" },

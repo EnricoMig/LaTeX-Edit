@@ -1,4 +1,4 @@
-const TEMPLATE_PATTERN = /a!\{([^{}\n]+)\}$/;
+const TEMPLATE_PATTERN = /\\template\{([^{}\n]+)\}$/;
 
 export function tryExpandTemplate(editor, templates) {
     if (!editor || !templates || typeof templates !== "object") {

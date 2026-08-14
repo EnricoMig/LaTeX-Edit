@@ -41,6 +41,7 @@ export function createExplorer({
     let renameInFlight = false;
     let moveInFlight = false;
     let dragSourcePath = null;
+    let createTarget = "";
     let mainPosition = localStorage.getItem("latexedit.mainSort") === "below" ? "below" : "above";
 
     const btnMainAbove = rootEl.querySelector("#btn-main-sort-above");
@@ -161,6 +162,29 @@ export function createExplorer({
             el.classList.remove("is-dragging");
         });
         dragSourcePath = null;
+    }
+
+    function resolveCreateParent() {
+        if (createTarget && fs.isDir(createTarget)) {
+            return createTarget;
+        }
+        return "";
+    }
+
+    function syncCreateTargetUi() {
+        treeEl.classList.toggle("is-root-target", fs.isOpen() && createTarget === "");
+        treeEl.querySelectorAll(".tree-row.is-create-target").forEach((el) => {
+            el.classList.remove("is-create-target");
+        });
+        if (createTarget) {
+            const row = treeEl.querySelector(`.tree-row[data-path="${CSS.escape(createTarget)}"]`);
+            row?.classList.add("is-create-target");
+        }
+    }
+
+    function setCreateTarget(path) {
+        createTarget = path || "";
+        syncCreateTargetUi();
     }
 
     function resolveDropTarget(event) {
@@ -373,20 +397,27 @@ export function createExplorer({
                 `;
             })
             .join("");
+        syncCreateTargetUi();
     }
 
     treeEl.addEventListener("click", (event) => {
+        if (event.target.matches("input")) {
+            return;
+        }
         const row = event.target.closest(".tree-row");
-        if (!row || event.target.matches("input")) {
+        if (!row) {
+            setCreateTarget("");
             return;
         }
         const path = row.dataset.path;
         const type = row.dataset.type;
         if (type === "dir") {
+            setCreateTarget(path);
             fs.toggleExpanded(path);
             render();
             return;
         }
+        setCreateTarget(parentPath(path));
         onOpenFile?.(path);
     });
 
@@ -546,16 +577,11 @@ export function createExplorer({
     );
 
     rootEl.querySelector("#btn-new-file")?.addEventListener("click", () => {
-        const active = fs.getActivePath();
-        const parent = active && fs.isFile(active) ? parentPath(active) : "";
-        promptNewItem("file", parent);
+        promptNewItem("file", resolveCreateParent());
     });
 
     rootEl.querySelector("#btn-new-folder")?.addEventListener("click", () => {
-        const active = fs.getActivePath();
-        const parent =
-            active && fs.isFile(active) ? parentPath(active) : active && fs.isDir(active) ? active : "";
-        promptNewItem("dir", parent);
+        promptNewItem("dir", resolveCreateParent());
     });
 
     btnMainAbove?.addEventListener("click", () => setMainPosition("above"));

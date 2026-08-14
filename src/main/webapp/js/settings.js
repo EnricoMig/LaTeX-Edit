@@ -63,64 +63,15 @@ function escapeHtml(text) {
         .replaceAll('"', "&quot;");
 }
 
-function renderTemplateList(container, templates, onTemplatesChange) {
-    if (!container) {
-        return;
+function uniqueTemplateName(templates, base) {
+    if (!templates[base]) {
+        return base;
     }
-    const entries = Object.entries(templates);
-    if (entries.length === 0) {
-        container.innerHTML = `<p class="settings-empty">Nenhum template. Crie um para usar <code>a!{nome}</code> no editor.</p>`;
-        return;
+    let n = 2;
+    while (templates[`${base} (${n})`]) {
+        n += 1;
     }
-    container.innerHTML = entries
-        .map(
-            ([name, content]) => `
-        <article class="template-card" data-template-name="${escapeHtml(name)}">
-            <div class="template-card-head">
-                <strong>${escapeHtml(name)}</strong>
-                <div class="template-card-actions">
-                    <button type="button" class="btn btn-tiny" data-template-edit="${escapeHtml(name)}">Editar</button>
-                    <button type="button" class="btn btn-tiny btn-danger-soft" data-template-delete="${escapeHtml(name)}">Excluir</button>
-                </div>
-            </div>
-            <pre class="template-preview">${escapeHtml(String(content).slice(0, 180))}${String(content).length > 180 ? "…" : ""}</pre>
-        </article>
-    `
-        )
-        .join("");
-
-    container.querySelectorAll("[data-template-edit]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-            const name = btn.getAttribute("data-template-edit");
-            const current = templates[name] ?? "";
-            const nextName = window.prompt("Nome do template:", name);
-            if (!nextName?.trim()) {
-                return;
-            }
-            const nextContent = window.prompt("Conteúdo LaTeX do template:", current);
-            if (nextContent === null) {
-                return;
-            }
-            const nextTemplates = { ...templates };
-            if (nextName.trim() !== name) {
-                delete nextTemplates[name];
-            }
-            nextTemplates[nextName.trim()] = nextContent;
-            onTemplatesChange(nextTemplates);
-        });
-    });
-
-    container.querySelectorAll("[data-template-delete]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-            const name = btn.getAttribute("data-template-delete");
-            if (!window.confirm(`Excluir o template "${name}"?`)) {
-                return;
-            }
-            const nextTemplates = { ...templates };
-            delete nextTemplates[name];
-            onTemplatesChange(nextTemplates);
-        });
-    });
+    return `${base} (${n})`;
 }
 
 export function createSettingsPage({
@@ -132,12 +83,163 @@ export function createSettingsPage({
     accentCustomInput,
     templateListEl,
     btnAddTemplate,
+    templateEditorEl,
+    templateNameInput,
+    templateBodyInput,
     onChange,
 }) {
+    let activeTab = "geral";
+    let editingName = null;
+    let menuEl = null;
+
+    function hideMenu() {
+        menuEl?.remove();
+        menuEl = null;
+    }
+
+    function closeEditor() {
+        editingName = null;
+        if (templateEditorEl) {
+            templateEditorEl.hidden = true;
+        }
+    }
+
+    function openEditor(name = "", content = "", originalName = null) {
+        editingName = originalName;
+        if (templateNameInput) {
+            templateNameInput.value = name;
+        }
+        if (templateBodyInput) {
+            templateBodyInput.value = content;
+        }
+        if (templateEditorEl) {
+            templateEditorEl.hidden = false;
+            templateNameInput?.focus();
+            templateNameInput?.select();
+        }
+    }
+
+    function saveEditor() {
+        const name = templateNameInput?.value.trim() || "";
+        const content = templateBodyInput?.value ?? "";
+        if (!name) {
+            window.alert("Informe o nome do template.");
+            templateNameInput?.focus();
+            return;
+        }
+        const templates = { ...loadSettings().templates };
+        if (editingName && editingName !== name) {
+            delete templates[editingName];
+        }
+        templates[name] = content;
+        onTemplatesChange(templates);
+        closeEditor();
+    }
+
     function onTemplatesChange(nextTemplates) {
         const next = saveSettings({ templates: nextTemplates });
-        renderTemplateList(templateListEl, next.templates, onTemplatesChange);
+        renderTemplateList(next.templates);
         onChange?.(next);
+    }
+
+    function showCardMenu(anchor, name) {
+        hideMenu();
+        menuEl = document.createElement("div");
+        menuEl.className = "template-menu";
+        menuEl.setAttribute("role", "menu");
+        menuEl.innerHTML = `
+            <button type="button" class="template-menu-item" data-action="edit">Editar</button>
+            <button type="button" class="template-menu-item" data-action="duplicate">Duplicar</button>
+            <button type="button" class="template-menu-item is-danger" data-action="delete">Excluir</button>
+        `;
+        document.body.appendChild(menuEl);
+        const rect = anchor.getBoundingClientRect();
+        const width = menuEl.offsetWidth || 140;
+        const left = Math.min(rect.right - width, window.innerWidth - width - 8);
+        const top = Math.min(rect.bottom + 4, window.innerHeight - menuEl.offsetHeight - 8);
+        menuEl.style.left = `${Math.max(8, left)}px`;
+        menuEl.style.top = `${Math.max(8, top)}px`;
+
+        menuEl.addEventListener("click", (event) => {
+            const action = event.target.closest("[data-action]")?.dataset.action;
+            hideMenu();
+            if (!action) {
+                return;
+            }
+            const templates = { ...loadSettings().templates };
+            if (action === "edit") {
+                openEditor(name, templates[name] ?? "", name);
+                return;
+            }
+            if (action === "duplicate") {
+                const copyName = uniqueTemplateName(templates, `${name} (cópia)`);
+                templates[copyName] = templates[name] ?? "";
+                onTemplatesChange(templates);
+                return;
+            }
+            if (action === "delete" && window.confirm(`Excluir o template "${name}"?`)) {
+                delete templates[name];
+                onTemplatesChange(templates);
+            }
+        });
+    }
+
+    function renderTemplateList(templates) {
+        if (!templateListEl) {
+            return;
+        }
+        const entries = Object.entries(templates || {});
+        if (entries.length === 0) {
+            templateListEl.innerHTML = `
+                <p class="settings-empty">Nenhum template. Use o botão + para criar e insira com <code>\\template{nome}</code>.</p>
+            `;
+            return;
+        }
+        templateListEl.innerHTML = entries
+            .map(
+                ([name, content]) => `
+            <article class="template-card" data-template-name="${escapeHtml(name)}">
+                <div class="template-card-head">
+                    <strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong>
+                    <button
+                        type="button"
+                        class="icon-btn template-kebab"
+                        data-template-menu="${escapeHtml(name)}"
+                        title="Mais opções"
+                        aria-label="Mais opções de ${escapeHtml(name)}"
+                    >
+                        <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <pre class="template-preview">${escapeHtml(String(content).slice(0, 140))}${String(content).length > 140 ? "…" : ""}</pre>
+                <code class="template-shortcut">\\template{${escapeHtml(name)}}</code>
+            </article>
+        `
+            )
+            .join("");
+
+        templateListEl.querySelectorAll("[data-template-menu]").forEach((btn) => {
+            btn.addEventListener("click", (event) => {
+                event.stopPropagation();
+                showCardMenu(btn, btn.getAttribute("data-template-menu"));
+            });
+        });
+    }
+
+    function setTab(tab) {
+        activeTab = tab === "templates" ? "templates" : "geral";
+        modalEl?.querySelectorAll("[data-settings-tab]").forEach((btn) => {
+            const selected = btn.getAttribute("data-settings-tab") === activeTab;
+            btn.classList.toggle("is-active", selected);
+            btn.setAttribute("aria-selected", String(selected));
+        });
+        modalEl?.querySelectorAll("[data-settings-panel]").forEach((panel) => {
+            panel.hidden = panel.getAttribute("data-settings-panel") !== activeTab;
+        });
+        if (activeTab !== "templates") {
+            closeEditor();
+            hideMenu();
+        }
     }
 
     function syncForm(settings) {
@@ -158,17 +260,22 @@ export function createSettingsPage({
                 btn.style.setProperty("--swatch", ACCENT_PRESETS[preset].light);
             }
         });
-        renderTemplateList(templateListEl, settings.templates || {}, onTemplatesChange);
+        renderTemplateList(settings.templates || {});
     }
 
     function open() {
         syncForm(loadSettings());
+        setTab(activeTab);
         modalEl.hidden = false;
         openBtn?.setAttribute("aria-pressed", "true");
-        wordWrapInput?.focus();
+        if (activeTab === "geral") {
+            wordWrapInput?.focus();
+        }
     }
 
     function close() {
+        hideMenu();
+        closeEditor();
         modalEl.hidden = true;
         openBtn?.setAttribute("aria-pressed", "false");
     }
@@ -181,6 +288,10 @@ export function createSettingsPage({
 
     modalEl?.querySelectorAll("[data-close-settings]").forEach((el) => {
         el.addEventListener("click", () => close());
+    });
+
+    modalEl?.querySelectorAll("[data-settings-tab]").forEach((btn) => {
+        btn.addEventListener("click", () => setTab(btn.getAttribute("data-settings-tab")));
     });
 
     wordWrapInput?.addEventListener("change", () => {
@@ -220,22 +331,33 @@ export function createSettingsPage({
     });
 
     btnAddTemplate?.addEventListener("click", () => {
-        const name = window.prompt("Nome do template (usado em a!{nome}):");
-        if (!name?.trim()) {
-            return;
+        setTab("templates");
+        openEditor("", "", null);
+    });
+
+    templateEditorEl?.querySelector("[data-template-save]")?.addEventListener("click", () => {
+        saveEditor();
+    });
+    templateEditorEl?.querySelector("[data-template-cancel]")?.addEventListener("click", () => {
+        closeEditor();
+    });
+
+    document.addEventListener("pointerdown", (event) => {
+        if (menuEl && !menuEl.contains(event.target) && !event.target.closest(".template-kebab")) {
+            hideMenu();
         }
-        const content = window.prompt("Conteúdo LaTeX:", "");
-        if (content === null) {
-            return;
-        }
-        const settings = loadSettings();
-        const nextTemplates = { ...settings.templates, [name.trim()]: content };
-        onChange?.(saveSettings({ templates: nextTemplates }));
-        syncForm(loadSettings());
     });
 
     document.addEventListener("keydown", (event) => {
         if (event.key === "Escape" && isOpen()) {
+            if (menuEl) {
+                hideMenu();
+                return;
+            }
+            if (templateEditorEl && !templateEditorEl.hidden) {
+                closeEditor();
+                return;
+            }
             close();
         }
     });

@@ -31,6 +31,11 @@
     --editor-line: #243041;
     --editor-caret: #5ec8c8;
     --editor-selection: rgba(94, 200, 200, 0.28);
+    --tok-command: #7dd3d3;
+    --tok-keyword: #f0c674;
+    --tok-comment: #6d7b8d;
+    --tok-math: #c9a0ff;
+    --tok-punct: #9aa8b8;
     --shadow-soft: 0 1px 0 rgba(26, 35, 50, 0.04);
     --shadow-pane: 0 8px 24px rgba(26, 35, 50, 0.06);
     --shadow-menu: 0 12px 28px rgba(26, 35, 50, 0.16);
@@ -83,6 +88,11 @@ html[data-theme="dark"] {
     --editor-line: #1c2634;
     --editor-caret: #5ec8c8;
     --editor-selection: rgba(94, 200, 200, 0.24);
+    --tok-command: #6ee7e7;
+    --tok-keyword: #f5d48a;
+    --tok-comment: #6b7a8d;
+    --tok-math: #d4b4ff;
+    --tok-punct: #8b98a8;
     --shadow-soft: 0 1px 0 rgba(0, 0, 0, 0.35);
     --shadow-pane: 0 10px 28px rgba(0, 0, 0, 0.35);
     --shadow-menu: 0 14px 32px rgba(0, 0, 0, 0.45);
@@ -651,6 +661,16 @@ html[data-theme="dark"] .theme-icon-sun {
     letter-spacing: 0.05em;
 }
 
+.log-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.1rem;
+}
+
+.log-header-actions .icon-btn.is-copied {
+    color: var(--accent);
+}
+
 .log-body {
     margin: 0;
     padding: 0.65rem 0.85rem;
@@ -894,6 +914,16 @@ html[data-theme="dark"] .theme-icon-sun {
     overflow: auto;
     padding: 0.35rem 0.3rem 0.75rem;
     font-family: var(--font-ui);
+}
+
+.tree-row.is-create-target {
+    background: var(--accent-soft);
+    outline: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.explorer-tree.is-root-target {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+    background: color-mix(in srgb, var(--accent-soft) 35%, transparent);
 }
 
 .explorer-empty {
@@ -1320,9 +1350,52 @@ html[data-theme="dark"] .theme-icon-sun {
 }
 
 .settings-card {
-    width: min(560px, calc(100vw - 2rem));
+    width: min(640px, calc(100vw - 2rem));
     max-height: min(88vh, 920px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-tabs {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.15rem;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--paper-deep);
+    flex: 0 0 auto;
+}
+
+.settings-tab {
+    appearance: none;
+    flex: 1;
+    border: 0;
+    border-radius: 8px;
+    padding: 0.45rem 0.7rem;
+    background: transparent;
+    color: var(--ink-muted);
+    font: inherit;
+    font-weight: 650;
+    font-size: 0.84rem;
+    cursor: pointer;
+}
+
+.settings-tab.is-active {
+    background: var(--paper-raised);
+    color: var(--ink);
+    box-shadow: var(--shadow-soft);
+}
+
+.settings-panel {
+    flex: 1;
+    min-height: 0;
     overflow: auto;
+    margin-top: 0.85rem;
+}
+
+.settings-panel[hidden] {
+    display: none !important;
 }
 
 .settings-section {
@@ -1410,46 +1483,177 @@ html[data-theme="dark"] .theme-icon-sun {
 }
 
 .settings-template-hint {
-    margin-top: 0;
+    margin: 0 0 0.75rem;
 }
 
-.template-list {
+.templates-panel {
+    position: relative;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
-    gap: 0.55rem;
-    margin: 0.55rem 0 0.75rem;
+    min-height: 22rem;
+}
+
+.template-grid {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding-bottom: 3.5rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+    gap: 0.65rem;
+    align-content: start;
 }
 
 .template-card {
     border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 0.65rem 0.75rem;
+    border-radius: 12px;
+    padding: 0.7rem 0.75rem 0.8rem;
     background: color-mix(in srgb, var(--paper) 70%, var(--paper-raised));
+    min-height: 7.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
 }
 
 .template-card-head {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    gap: 0.75rem;
-    margin-bottom: 0.35rem;
+    gap: 0.4rem;
 }
 
-.template-card-actions {
-    display: flex;
-    gap: 0.35rem;
+.template-card-head strong {
+    font-size: 0.88rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.template-kebab {
+    width: 1.6rem;
+    height: 1.6rem;
+    flex-shrink: 0;
 }
 
 .template-preview {
     margin: 0;
-    padding: 0.45rem 0.55rem;
+    padding: 0.4rem 0.45rem;
     border-radius: 6px;
     background: var(--verbatim-bg);
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     white-space: pre-wrap;
-    max-height: 5.5rem;
-    overflow: auto;
+    max-height: 3.6rem;
+    overflow: hidden;
+    flex: 1;
+}
+
+.template-shortcut {
+    font-size: 0.68rem;
+    color: var(--ink-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fab-add-template {
+    position: absolute;
+    right: 0.85rem;
+    bottom: 0.85rem;
+    width: 2.7rem;
+    height: 2.7rem;
+    border: 0;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--accent-contrast);
+    box-shadow: var(--shadow-menu);
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+.fab-add-template:hover {
+    background: var(--accent-hover);
+}
+
+.template-menu {
+    position: fixed;
+    z-index: 1300;
+    min-width: 9.5rem;
+    padding: 0.3rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: var(--paper-raised);
+    box-shadow: var(--shadow-menu);
+    display: flex;
+    flex-direction: column;
+}
+
+.template-menu-item {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    padding: 0.45rem 0.6rem;
+    border-radius: 5px;
+    font-size: 0.82rem;
+    color: var(--ink);
+    cursor: pointer;
+}
+
+.template-menu-item:hover {
+    background: var(--accent-soft);
+}
+
+.template-menu-item.is-danger {
+    color: var(--danger);
+}
+
+.template-editor {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 0.85rem;
+    background: var(--paper-raised);
+    border-radius: 10px;
+}
+
+.template-editor[hidden] {
+    display: none !important;
+}
+
+.template-editor h3 {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.template-editor-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.78rem;
+    color: var(--ink-muted);
+}
+
+.template-editor-field input,
+.template-editor-field textarea {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 0.45rem 0.55rem;
+    background: var(--paper-deep);
+    color: var(--ink);
+    font: inherit;
+}
+
+.template-editor-field textarea {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    resize: vertical;
+    min-height: 8rem;
 }
 
 .btn-danger-soft {
@@ -1662,7 +1866,58 @@ html[data-theme="dark"] .theme-icon-sun {
     white-space: pre;
 }
 
+.editor-code {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+}
+
+.editor-highlight {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 1rem 1rem 1rem 0.85rem;
+    overflow: hidden;
+    pointer-events: none;
+    color: var(--editor-fg);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    line-height: 1.55;
+    tab-size: 2;
+    white-space: pre;
+}
+
+.editor-highlight.is-word-wrap {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.tok-command {
+    color: var(--tok-command);
+}
+
+.tok-keyword {
+    color: var(--tok-keyword);
+    font-weight: 600;
+}
+
+.tok-comment {
+    color: var(--tok-comment);
+    font-style: italic;
+}
+
+.tok-math {
+    color: var(--tok-math);
+}
+
+.tok-punct {
+    color: var(--tok-punct);
+}
+
 .editor {
+    position: relative;
+    z-index: 1;
     width: 100%;
     height: 100%;
     margin: 0;
@@ -1671,7 +1926,8 @@ html[data-theme="dark"] .theme-icon-sun {
     resize: none;
     outline: none;
     background: transparent;
-    color: var(--editor-fg);
+    color: transparent;
+    -webkit-text-fill-color: transparent;
     caret-color: var(--editor-caret);
     font-family: var(--font-mono);
     font-size: 0.875rem;
@@ -1689,6 +1945,8 @@ html[data-theme="dark"] .theme-icon-sun {
 
 .editor::selection {
     background: var(--editor-selection);
+    color: transparent;
+    -webkit-text-fill-color: transparent;
 }
 
 /* —— Autocomplete —— */

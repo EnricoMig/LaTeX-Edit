@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LaTeX Edit — Editor e Leitor de LaTeX</title>
+    <title>LaTeX IDE</title>
     <script>
         (() => {
             try {
@@ -35,7 +35,7 @@
                         <span class="brand-mark-glyph">T<sub>E</sub>X</span>
                     </span>
                     <div class="brand-text">
-                        <h1 class="brand-name">LaTeX&nbsp;Edit</h1>
+                        <h1 class="brand-name">LaTeX&nbsp;IDE</h1>
                         <p class="brand-tagline">local</p>
                     </div>
                 </div>
@@ -265,16 +265,19 @@
                         </div>
                         <div class="editor-shell">
                             <pre class="line-numbers" id="line-numbers" aria-hidden="true">1</pre>
-                            <textarea
-                                id="editor"
-                                class="editor is-word-wrap"
-                                spellcheck="false"
-                                autocomplete="off"
-                                autocapitalize="off"
-                                autocorrect="off"
-                                wrap="soft"
-                                aria-label="Código LaTeX"
-                            ></textarea>
+                            <div class="editor-code">
+                                <pre class="editor-highlight is-word-wrap" id="editor-highlight" aria-hidden="true"></pre>
+                                <textarea
+                                    id="editor"
+                                    class="editor is-word-wrap"
+                                    spellcheck="false"
+                                    autocomplete="off"
+                                    autocapitalize="off"
+                                    autocorrect="off"
+                                    wrap="soft"
+                                    aria-label="Código LaTeX"
+                                ></textarea>
+                            </div>
                         </div>
                     </section>
 
@@ -322,7 +325,18 @@
                 <section class="log-panel" id="log-panel" hidden aria-label="Log de compilação">
                     <div class="log-header">
                         <strong>Logs</strong>
-                        <button type="button" class="icon-btn" id="btn-close-log" title="Fechar log">×</button>
+                        <div class="log-header-actions">
+                            <button
+                                type="button"
+                                class="icon-btn"
+                                id="btn-copy-log"
+                                title="Copiar log"
+                                aria-label="Copiar texto do log"
+                            >
+                                <i class="fa-regular fa-copy" aria-hidden="true"></i>
+                            </button>
+                            <button type="button" class="icon-btn" id="btn-close-log" title="Fechar log" aria-label="Fechar log">×</button>
+                        </div>
                     </div>
                     <pre class="log-body" id="log-body"></pre>
                 </section>
@@ -365,65 +379,89 @@
                 <h2 id="settings-modal-title">Configurações</h2>
                 <button type="button" class="icon-btn" data-close-settings title="Fechar">×</button>
             </div>
-            <p class="modal-hint">Preferências do editor neste navegador.</p>
+            <div class="settings-tabs" role="tablist" aria-label="Seções de configuração">
+                <button type="button" class="settings-tab is-active" role="tab" id="tab-geral" data-settings-tab="geral" aria-selected="true" aria-controls="panel-geral">
+                    Geral
+                </button>
+                <button type="button" class="settings-tab" role="tab" id="tab-templates" data-settings-tab="templates" aria-selected="false" aria-controls="panel-templates">
+                    Templates
+                </button>
+            </div>
 
-            <section class="settings-section">
-                <h3 class="settings-section-title">Editor</h3>
-                <div class="settings-list">
-                    <label class="settings-row" for="setting-word-wrap">
-                        <span class="settings-copy">
-                            <strong>Word wrap</strong>
-                            <span>Quebra automática de linhas longas no editor</span>
-                        </span>
-                        <input type="checkbox" id="setting-word-wrap" checked>
-                    </label>
-                </div>
-            </section>
-
-            <section class="settings-section">
-                <h3 class="settings-section-title">Aparência</h3>
-                <div class="settings-list">
-                    <label class="settings-field" for="setting-theme-mode">
-                        <span class="settings-copy">
-                            <strong>Tema</strong>
-                            <span>Claro, escuro ou conforme o sistema</span>
-                        </span>
-                        <select id="setting-theme-mode" class="settings-select">
-                            <option value="system">Sistema</option>
-                            <option value="light">Claro</option>
-                            <option value="dark">Escuro</option>
-                        </select>
-                    </label>
-                    <div class="settings-field settings-field-block">
-                        <span class="settings-copy">
-                            <strong>Cor de destaque</strong>
-                            <span>Botões, status e realces da interface</span>
-                        </span>
-                        <div class="accent-swatches" id="accent-preset-list">
-                            <button type="button" class="accent-swatch is-active" data-accent-preset="teal" title="Teal" aria-label="Teal"></button>
-                            <button type="button" class="accent-swatch" data-accent-preset="blue" title="Azul" aria-label="Azul"></button>
-                            <button type="button" class="accent-swatch" data-accent-preset="violet" title="Violeta" aria-label="Violeta"></button>
-                            <button type="button" class="accent-swatch" data-accent-preset="green" title="Verde" aria-label="Verde"></button>
-                            <button type="button" class="accent-swatch" data-accent-preset="orange" title="Laranja" aria-label="Laranja"></button>
-                            <button type="button" class="accent-swatch" data-accent-preset="rose" title="Rosa" aria-label="Rosa"></button>
-                            <button type="button" class="accent-swatch accent-swatch-custom" data-accent-preset="custom" title="Personalizada" aria-label="Cor personalizada">#</button>
+            <div class="settings-panel" id="panel-geral" data-settings-panel="geral" role="tabpanel" aria-labelledby="tab-geral">
+                <p class="modal-hint">Preferências do editor neste navegador.</p>
+                <section class="settings-section">
+                    <h3 class="settings-section-title">Editor</h3>
+                    <div class="settings-list">
+                        <label class="settings-row" for="setting-word-wrap">
+                            <span class="settings-copy">
+                                <strong>Word wrap</strong>
+                                <span>Quebra automática de linhas longas no editor</span>
+                            </span>
+                            <input type="checkbox" id="setting-word-wrap" checked>
+                        </label>
+                    </div>
+                </section>
+                <section class="settings-section">
+                    <h3 class="settings-section-title">Aparência</h3>
+                    <div class="settings-list">
+                        <label class="settings-field" for="setting-theme-mode">
+                            <span class="settings-copy">
+                                <strong>Tema</strong>
+                                <span>Claro, escuro ou conforme o sistema</span>
+                            </span>
+                            <select id="setting-theme-mode" class="settings-select">
+                                <option value="system">Sistema</option>
+                                <option value="light">Claro</option>
+                                <option value="dark">Escuro</option>
+                            </select>
+                        </label>
+                        <div class="settings-field settings-field-block">
+                            <span class="settings-copy">
+                                <strong>Cor de destaque</strong>
+                                <span>Botões, status e realces da interface</span>
+                            </span>
+                            <div class="accent-swatches" id="accent-preset-list">
+                                <button type="button" class="accent-swatch is-active" data-accent-preset="teal" title="Teal" aria-label="Teal"></button>
+                                <button type="button" class="accent-swatch" data-accent-preset="blue" title="Azul" aria-label="Azul"></button>
+                                <button type="button" class="accent-swatch" data-accent-preset="violet" title="Violeta" aria-label="Violeta"></button>
+                                <button type="button" class="accent-swatch" data-accent-preset="green" title="Verde" aria-label="Verde"></button>
+                                <button type="button" class="accent-swatch" data-accent-preset="orange" title="Laranja" aria-label="Laranja"></button>
+                                <button type="button" class="accent-swatch" data-accent-preset="rose" title="Rosa" aria-label="Rosa"></button>
+                                <button type="button" class="accent-swatch accent-swatch-custom" data-accent-preset="custom" title="Personalizada" aria-label="Cor personalizada">#</button>
+                            </div>
+                            <input type="color" id="setting-accent-custom" class="settings-color-input" value="#0d6e6e" hidden>
                         </div>
-                        <input type="color" id="setting-accent-custom" class="settings-color-input" value="#0d6e6e" hidden>
+                    </div>
+                </section>
+                <div class="modal-toolbar settings-toolbar">
+                    <button type="button" class="btn btn-primary" data-close-settings>Fechar</button>
+                </div>
+            </div>
+
+            <div class="settings-panel templates-panel" id="panel-templates" data-settings-panel="templates" role="tabpanel" aria-labelledby="tab-templates" hidden>
+                <p class="modal-hint settings-template-hint">
+                    Insira no editor com <code>\template{nome}</code> + <kbd>Tab</kbd> ou <kbd>Enter</kbd>.
+                </p>
+                <div class="template-grid" id="template-list"></div>
+                <button type="button" class="fab-add-template" id="btn-add-template" title="Novo template" aria-label="Novo template">
+                    <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                </button>
+                <div class="template-editor" id="template-editor" hidden>
+                    <h3>Template</h3>
+                    <label class="template-editor-field">
+                        <span>Nome</span>
+                        <input type="text" id="template-editor-name" spellcheck="false" autocomplete="off" placeholder="ex.: artigo">
+                    </label>
+                    <label class="template-editor-field">
+                        <span>Conteúdo LaTeX</span>
+                        <textarea id="template-editor-body" spellcheck="false" rows="8" placeholder="\section{...}"></textarea>
+                    </label>
+                    <div class="modal-toolbar">
+                        <button type="button" class="btn btn-secondary" data-template-cancel>Cancelar</button>
+                        <button type="button" class="btn btn-primary" data-template-save>Salvar</button>
                     </div>
                 </div>
-            </section>
-
-            <section class="settings-section">
-                <h3 class="settings-section-title">Templates LaTeX</h3>
-                <p class="modal-hint settings-template-hint">
-                    Crie snippets e insira no editor com <code>a!{nome}</code> + <kbd>Tab</kbd> ou <kbd>Enter</kbd>.
-                </p>
-                <div class="template-list" id="template-list"></div>
-                <button type="button" class="btn btn-secondary" id="btn-add-template">＋ Novo template</button>
-            </section>
-
-            <div class="modal-toolbar settings-toolbar">
-                <button type="button" class="btn btn-primary" data-close-settings>Fechar</button>
             </div>
         </div>
     </div>
