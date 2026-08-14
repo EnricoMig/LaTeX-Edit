@@ -43,6 +43,8 @@
     --font-ui: "Instrument Sans", "Segoe UI", sans-serif;
     --font-display: "Instrument Serif", Georgia, serif;
     --font-mono: "IBM Plex Mono", Consolas, monospace;
+    --editor-font-size: 14px;
+    --editor-line-height: 22px;
     --topbar-h: 56px;
     --statusbar-h: 28px;
     --pane-header-h: 40px;
@@ -1853,13 +1855,10 @@ html[data-theme="dark"] .theme-icon-sun {
 
 .line-numbers {
     margin: 0;
-    padding: 1rem 0.65rem 1rem 0.85rem;
+    padding: 16px 0.65rem 16px 0.85rem;
     border-right: 1px solid var(--editor-line);
     background: var(--editor-gutter);
     color: var(--editor-muted);
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    line-height: 1.55;
     text-align: right;
     user-select: none;
     overflow: hidden;
@@ -1870,27 +1869,51 @@ html[data-theme="dark"] .theme-icon-sun {
     position: relative;
     min-width: 0;
     min-height: 0;
+    height: 100%;
+}
+
+.line-numbers,
+.editor-highlight,
+.editor {
+    font: 400 var(--editor-font-size) / var(--editor-line-height) var(--font-mono);
+    font-variant-ligatures: none;
+    font-feature-settings: "liga" 0, "calt" 0;
+    font-kerning: none;
+    letter-spacing: 0;
+    word-spacing: 0;
+    tab-size: 2;
+}
+
+.editor-highlight,
+.editor {
+    margin: 0;
+    border: 0;
+    padding: 16px 1rem 16px 0.85rem;
+    scrollbar-gutter: stable;
+    white-space: pre;
 }
 
 .editor-highlight {
     position: absolute;
     inset: 0;
-    margin: 0;
-    padding: 1rem 1rem 1rem 0.85rem;
     overflow: hidden;
     pointer-events: none;
+    user-select: none;
     color: var(--editor-fg);
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    line-height: 1.55;
-    tab-size: 2;
-    white-space: pre;
 }
 
-.editor-highlight.is-word-wrap {
+.editor-highlight.is-word-wrap,
+.editor.is-word-wrap {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     word-break: break-word;
+}
+
+.editor-highlight span {
+    display: inline;
+    vertical-align: top;
+    font: inherit;
+    line-height: var(--editor-line-height);
 }
 
 .tok-command {
@@ -1899,12 +1922,10 @@ html[data-theme="dark"] .theme-icon-sun {
 
 .tok-keyword {
     color: var(--tok-keyword);
-    font-weight: 600;
 }
 
 .tok-comment {
     color: var(--tok-comment);
-    font-style: italic;
 }
 
 .tok-math {
@@ -1918,32 +1939,21 @@ html[data-theme="dark"] .theme-icon-sun {
 .editor {
     position: relative;
     z-index: 1;
+    display: block;
     width: 100%;
     height: 100%;
-    margin: 0;
-    border: 0;
-    padding: 1rem 1rem 1rem 0.85rem;
+    overflow: auto;
+    appearance: none;
     resize: none;
     outline: none;
     background: transparent;
     color: transparent;
     -webkit-text-fill-color: transparent;
     caret-color: var(--editor-caret);
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    line-height: 1.55;
-    tab-size: 2;
-    overflow: auto;
-    white-space: pre;
 }
 
-.editor.is-word-wrap {
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    word-break: break-word;
-}
-
-.editor::selection {
+.editor::selection,
+.editor::-moz-selection {
     background: var(--editor-selection);
     color: transparent;
     -webkit-text-fill-color: transparent;

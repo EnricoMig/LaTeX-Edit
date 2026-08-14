@@ -1,5 +1,6 @@
 # LaTeX IDE
 
+![LaTeX_IDE-Logo](assets/LaTeX_IDE.svg)
 Editor web de LaTeX com workspace no servidor (NAS), compilação real via **pdfLaTeX** e preview de PDF embutido.
 
 Front-end em **JavaScript vanilla** (sem React/Vue). Back-end em **Java 21** (WAR: Jetty em desenvolvimento, Tomcat no Docker).

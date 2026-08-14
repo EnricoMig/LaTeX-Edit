@@ -119,11 +119,15 @@ export function bindSyntaxHighlight(editor, layer) {
         });
     }
 
-    editor.addEventListener("input", schedule);
-    editor.addEventListener("scroll", () => {
+    function syncScroll() {
         layer.scrollTop = editor.scrollTop;
         layer.scrollLeft = editor.scrollLeft;
-    });
+    }
+
+    editor.addEventListener("input", schedule);
+    editor.addEventListener("scroll", syncScroll);
+    const resizeObserver = new ResizeObserver(syncScroll);
+    resizeObserver.observe(editor);
 
     paint();
     return { paint };
