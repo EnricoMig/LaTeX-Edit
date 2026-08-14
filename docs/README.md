@@ -1,4 +1,4 @@
-# Documentação — LaTeX Edit
+# Documentação — LaTeX IDE
 
 Documentação aprofundada do projeto. O [README principal](../README.md) cobre visão geral e início rápido; aqui está o detalhe.
 

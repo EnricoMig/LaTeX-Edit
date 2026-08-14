@@ -1,4 +1,4 @@
-# LaTeX Edit
+# LaTeX IDE
 
 Editor web de LaTeX com workspace no servidor (NAS), compilação real via **pdfLaTeX** e preview de PDF embutido.
 
@@ -8,7 +8,7 @@ Front-end em **JavaScript vanilla** (sem React/Vue). Back-end em **Java 21** (WA
 
 ## O que é
 
-O LaTeX Edit permite:
+O LaTeX IDE permite:
 
 - Abrir pastas de projeto no **NAS / servidor** (não no PC)
 - Editar `.tex` (e arquivos relacionados) no browser

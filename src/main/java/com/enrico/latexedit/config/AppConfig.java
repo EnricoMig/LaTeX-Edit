@@ -45,7 +45,7 @@ public final class AppConfig {
     }
 
     public static String appName() {
-        return get("app.name", "LaTeX Edit");
+        return get("app.name", "LaTeX IDE");
     }
 
     public static String appVersion() {

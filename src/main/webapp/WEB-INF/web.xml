@@ -5,7 +5,7 @@
          version="6.0"
          metadata-complete="false">
 
-    <display-name>LaTeX Edit</display-name>
+    <display-name>LaTeX IDE</display-name>
 
     <welcome-file-list>
         <welcome-file>index.html</welcome-file>
